@@ -1,17 +1,8 @@
-import ServiceManager from './managers/ServiceManager.js'
-import config from './config/env.config.js'
+import express from 'express'
+import servicesRouter from './routes/services.router.js'
 
-console.log(`App ejecutando en modo ${config.nodeEnv} - puerto ${config.port}`)
+const app = express()
+app.use(express.json())
+app.use('/api/services', servicesRouter)
 
-const manager = new ServiceManager()
-const services = await manager.getServices()
-console.log(services)
-
-const nuevo = await manager.addService({
-    name: "Electrónica",
-    description: "venta de equipos electrónicos",
-    duration: 60,
-    price: 30000,
-    category: "electronicos",
-    available: true
-})
+export default app
