@@ -30,8 +30,6 @@ class ServiceManager {
       return null;
     }
 
-    // generar id si hay servicios, ultimo id + 1
-    //  si no, 1
     const newId =
       services.length > 0 ? Math.max(...services.map((s) => s.id)) + 1 : 1; //busca el id mas alto
 
