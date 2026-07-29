@@ -4,7 +4,7 @@
     "name": "Mecánica",
     "description": "Servicio de mecanica general",
     "duration": 30,
-    "price": 6000,
+    "price": 9500,
     "category": "mecanica",
     "available": true
   },
@@ -15,7 +15,7 @@
     "duration": 45,
     "price": 3000,
     "category": "informatica",
-    "available": true
+    "available": false
   },
   {
     "id": 3,
@@ -25,5 +25,14 @@
     "price": 4000,
     "category": "informatica",
     "available": false
+  },
+  {
+    "id": 4,
+    "name": "Plomería",
+    "description": "Servicio de plomería general",
+    "duration": 60,
+    "price": 8000,
+    "category": "plomeria",
+    "available": true
   }
 ]

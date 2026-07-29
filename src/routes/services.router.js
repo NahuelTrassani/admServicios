@@ -27,7 +27,7 @@ router.get("/:id", async (req, res) => {
   try {
     const service = await serviceManager.getServiceById(serviceId);
     if (service) {
-      res.json(service);
+      res.status(200).json(service);
     } else {
       res.status(404).json({ error: "Servicio no encontrado" });
     }

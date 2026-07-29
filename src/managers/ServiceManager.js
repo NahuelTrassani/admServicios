@@ -19,10 +19,11 @@ class ServiceManager {
 
     //no acepta campos vacios
     if (
+      !serviceData ||
       !serviceData.name ||
       !serviceData.description ||
-      !serviceData.duration ||
-      !serviceData.price ||
+      serviceData.duration === undefined ||
+      serviceData.price === undefined ||
       !serviceData.category ||
       serviceData.available === undefined
     ) {
