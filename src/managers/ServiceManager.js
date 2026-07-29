@@ -32,7 +32,6 @@ class ServiceManager {
 
     // generar id si hay servicios, ultimo id + 1
     //  si no, 1
-    // const newId = services.length > 0 ? services[services.length - 1].id + 1 : 1 //busca el ultimo id del array no importa si es el mas alto
     const newId =
       services.length > 0 ? Math.max(...services.map((s) => s.id)) + 1 : 1; //busca el id mas alto
 
@@ -76,9 +75,7 @@ class ServiceManager {
     return services[index];
   }
 
-  // tiene que ser soft delete
-  // (baja logica)
-  // para eso tiene el campo available que es booleano
+  //baja logica
   async deleteService(id) {
     const numberId = parseInt(id);
     if (isNaN(numberId)) {
@@ -89,7 +86,7 @@ class ServiceManager {
     if (index === -1) {
       return null;
     }
-    // const deleted = services.splice(index, 1)[0]
+    // const deleted = services.splice(index, 1)[0] //borrado fisico
     services[index].available = false;
     await fs.writeFile(this.path, JSON.stringify(services, null, 2));
     return services[index];
