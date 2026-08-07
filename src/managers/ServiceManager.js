@@ -1,8 +1,13 @@
 import fs from "fs/promises";
+import path from "path";
+import { fileURLToPath } from "url";
+
+//se arma la ruta desde la ubicacion de este archivo y no desde donde se ejecuta node
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 class ServiceManager {
   constructor() {
-    this.path = "./src/data/services.json";
+    this.path = path.join(__dirname, "../data/services.json");
   }
 
   async getServices() {
@@ -33,8 +38,8 @@ class ServiceManager {
     const newId =
       services.length > 0 ? Math.max(...services.map((s) => s.id)) + 1 : 1; //busca el id mas alto
 
-    //inicializa
-    const newService = { id: newId, ...serviceData };
+    //el id generado va al final para que no lo pise un id enviado en el body
+    const newService = { ...serviceData, id: newId };
     services.push(newService);
 
     //escribe el en archivo el nuevo servicio

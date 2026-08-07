@@ -1,0 +1,745 @@
+{
+  "info": {
+    "name": "admServicios - Turnos y Reservas",
+    "description": "Casos de prueba de la API. Cada request valida el codigo de estado esperado y el contenido relevante. Correr con el servidor levantado (pnpm start).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "nuevoServicioId",
+      "value": ""
+    },
+    {
+      "key": "nuevaReservaId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Services",
+      "item": [
+        {
+          "name": "GET listar todos -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve un array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"]
+            }
+          }
+        },
+        {
+          "name": "GET filtrar por category -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('todos son de la categoria pedida', () => {",
+                  "  pm.response.json().forEach(s => pm.expect(s.category).to.eql('informatica'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?category=informatica",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"],
+              "query": [{ "key": "category", "value": "informatica" }]
+            }
+          }
+        },
+        {
+          "name": "GET filtrar por available -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('todos estan disponibles', () => {",
+                  "  pm.response.json().forEach(s => pm.expect(s.available).to.eql(true));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?available=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"],
+              "query": [{ "key": "available", "value": "true" }]
+            }
+          }
+        },
+        {
+          "name": "GET filtros combinados -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('cumple los dos filtros', () => {",
+                  "  pm.response.json().forEach(s => {",
+                  "    pm.expect(s.category).to.eql('informatica');",
+                  "    pm.expect(s.available).to.eql(false);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?category=informatica&available=false",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"],
+              "query": [
+                { "key": "category", "value": "informatica" },
+                { "key": "available", "value": "false" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET por id existente -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve el id pedido', () => pm.expect(pm.response.json().id).to.eql(1));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services", "1"]
+            }
+          }
+        },
+        {
+          "name": "GET por id inexistente -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services/999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services", "999"]
+            }
+          }
+        },
+        {
+          "name": "GET por id no numerico -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services/abc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services", "abc"]
+            }
+          }
+        },
+        {
+          "name": "POST crear valido -> 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('genera el id automaticamente', () => pm.expect(body.id).to.be.a('number'));",
+                  "pm.test('guarda los datos enviados', () => pm.expect(body.name).to.eql('Gasista'));",
+                  "pm.collectionVariables.set('nuevoServicioId', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Gasista\",\n  \"description\": \"Instalacion y reparacion de gas\",\n  \"duration\": 90,\n  \"price\": 12000,\n  \"category\": \"gas\",\n  \"available\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"]
+            }
+          }
+        },
+        {
+          "name": "POST con campo faltante -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Incompleto\",\n  \"description\": \"Le falta el precio\",\n  \"duration\": 30,\n  \"category\": \"varios\",\n  \"available\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"]
+            }
+          }
+        },
+        {
+          "name": "POST con precio 0 -> 201 (0 es valido)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('acepta price 0', () => pm.expect(pm.response.json().price).to.eql(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Presupuesto sin cargo\",\n  \"description\": \"Visita de diagnostico gratuita\",\n  \"duration\": 15,\n  \"price\": 0,\n  \"category\": \"varios\",\n  \"available\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"]
+            }
+          }
+        },
+        {
+          "name": "POST sin body -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400 y no 500', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"]
+            }
+          }
+        },
+        {
+          "name": "PUT actualizar -> 200 (el id no cambia)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('actualiza el precio', () => pm.expect(body.price).to.eql(15000));",
+                  "pm.test('conserva el id original', () => {",
+                  "  pm.expect(body.id).to.eql(Number(pm.collectionVariables.get('nuevoServicioId')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 15000,\n  \"id\": 999\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services/{{nuevoServicioId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services", "{{nuevoServicioId}}"]
+            }
+          }
+        },
+        {
+          "name": "PUT inexistente -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"price\": 100\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services/999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services", "999"]
+            }
+          }
+        },
+        {
+          "name": "DELETE baja logica -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('marca available en false', () => pm.expect(pm.response.json().available).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services/{{nuevoServicioId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services", "{{nuevoServicioId}}"]
+            }
+          }
+        },
+        {
+          "name": "DELETE verifica que el registro sigue existiendo -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('el servicio no se borro del archivo', () => pm.response.to.have.status(200));",
+                  "pm.test('quedo con available false', () => pm.expect(pm.response.json().available).to.eql(false));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services/{{nuevoServicioId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services", "{{nuevoServicioId}}"]
+            }
+          }
+        },
+        {
+          "name": "DELETE inexistente -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services/999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services", "999"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bookings",
+      "item": [
+        {
+          "name": "POST crear reserva -> 201 (services vacio)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('genera el id automaticamente', () => pm.expect(body.id).to.be.a('number'));",
+                  "pm.test('nace con services vacio', () => pm.expect(body.services).to.eql([]));",
+                  "pm.collectionVariables.set('nuevaReservaId', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientName\": \"Carlos Gomez\",\n  \"clientEmail\": \"carlos@gmail.com\",\n  \"date\": \"2026-08-20\",\n  \"time\": \"10:30\",\n  \"status\": \"pendiente\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"]
+            }
+          }
+        },
+        {
+          "name": "POST con campo faltante -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientName\": \"Sin email\",\n  \"date\": \"2026-08-20\",\n  \"time\": \"10:30\",\n  \"status\": \"pendiente\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"]
+            }
+          }
+        },
+        {
+          "name": "POST sin body -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400 y no 500', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings"]
+            }
+          }
+        },
+        {
+          "name": "GET reserva por id -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve la reserva pedida', () => {",
+                  "  pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('nuevaReservaId')));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "{{nuevaReservaId}}"]
+            }
+          }
+        },
+        {
+          "name": "GET reserva inexistente -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/999",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "999"]
+            }
+          }
+        },
+        {
+          "name": "POST agregar servicio a reserva -> 200 (quantity 1)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const item = pm.response.json().services.find(s => s.service === 1);",
+                  "pm.test('agrega el servicio', () => pm.expect(item).to.not.be.undefined);",
+                  "pm.test('arranca en quantity 1', () => pm.expect(item.quantity).to.eql(1));",
+                  "pm.test('guarda solo el id, no el objeto completo', () => {",
+                  "  pm.expect(Object.keys(item).sort()).to.eql(['quantity', 'service']);",
+                  "  pm.expect(item.service).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}/services/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "{{nuevaReservaId}}", "services", "1"]
+            }
+          }
+        },
+        {
+          "name": "POST mismo servicio otra vez -> 200 (quantity 2, no duplica)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const services = pm.response.json().services;",
+                  "const repetidos = services.filter(s => s.service === 1);",
+                  "pm.test('no duplica la entrada', () => pm.expect(repetidos.length).to.eql(1));",
+                  "pm.test('incrementa quantity a 2', () => pm.expect(repetidos[0].quantity).to.eql(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}/services/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "{{nuevaReservaId}}", "services", "1"]
+            }
+          }
+        },
+        {
+          "name": "POST agregar un segundo servicio -> 200 (dos entradas)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const services = pm.response.json().services;",
+                  "pm.test('ahora hay dos servicios distintos', () => pm.expect(services.length).to.eql(2));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}/services/4",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "{{nuevaReservaId}}", "services", "4"]
+            }
+          }
+        },
+        {
+          "name": "POST servicio inexistente -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}/services/999",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "api",
+                "bookings",
+                "{{nuevaReservaId}}",
+                "services",
+                "999"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST reserva inexistente -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/999/services/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "999", "services", "1"]
+            }
+          }
+        },
+        {
+          "name": "GET verifica persistencia de la relacion -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const services = pm.response.json().services;",
+                  "pm.test('la relacion quedo guardada en el archivo', () => {",
+                  "  pm.expect(services.length).to.eql(2);",
+                  "  pm.expect(services.find(s => s.service === 1).quantity).to.eql(2);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "bookings", "{{nuevaReservaId}}"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

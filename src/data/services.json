@@ -24,7 +24,7 @@
     "duration": 60,
     "price": 4000,
     "category": "informatica",
-    "available": false
+    "available": true
   },
   {
     "id": 4,
