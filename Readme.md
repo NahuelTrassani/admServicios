@@ -4,6 +4,29 @@ Pre-entrega 3 del curso Programación Backend I (CoderHouse).
 
 API REST construida con Express que expone dos recursos: `services` (los servicios que pueden reservarse) y `bookings` (las reservas de los clientes). Cada recurso tiene su propio router (`express.Router()`) y su manager, que encapsula la lógica de acceso a los datos y persiste la información en archivos JSON.
 
+## Nota sobre el DELETE de servicios
+
+**El `DELETE /api/services/:sid` realiza una baja lógica, no un borrado físico.** Esta implementación responde a la consigna dada en clase por el profesor.
+
+La baja se registra en el campo `available` de la instancia: al eliminar un servicio, su `available` pasa a `false`. El registro permanece en `services.json` y sigue siendo consultable por su id.
+
+Comportamiento esperado al probar el endpoint:
+
+```
+DELETE /api/services/3   ->  200, devuelve el servicio con "available": false
+GET    /api/services/3   ->  200, el registro sigue existiendo, ahora con "available": false
+```
+
+Que el servicio siga respondiendo después del DELETE **no es un error**: es el resultado de la baja lógica. El servicio queda marcado como no disponible en lugar de desaparecer del archivo.
+
+Motivo de la decisión: preservar la integridad referencial. Las reservas guardan referencias al `id` del servicio, y un borrado físico dejaría esas reservas apuntando a un registro inexistente. Con la baja lógica se conserva el historial de reservas y el dato sigue siendo consultable.
+
+Para listar únicamente los servicios activos se usa el filtro por query param:
+
+```
+GET /api/services?available=true
+```
+
 ## Instalación
 
 ```bash
@@ -95,7 +118,7 @@ Todas las rutas cuelgan de `/api/services`.
 | GET | `/api/services/:id` | Devuelve un servicio por id | 200 / 404 |
 | POST | `/api/services` | Crea un servicio con los datos del body | 201 / 400 |
 | PUT | `/api/services/:id` | Actualiza un servicio existente | 200 / 404 |
-| DELETE | `/api/services/:id` | Da de baja un servicio (baja lógica) | 200 / 404 |
+| DELETE | `/api/services/:id` | Da de baja un servicio (baja lógica, ver nota al inicio) | 200 / 404 |
 
 Ante un error inesperado, todos los endpoints responden `500`.
 
@@ -164,7 +187,25 @@ Responde `404` si el servicio no existe.
 DELETE http://localhost:8080/api/services/1
 ```
 
-Realiza una baja lógica: el servicio no se elimina del archivo, se marca con `available: false`. Devuelve el servicio dado de baja, o `404` si no existe.
+Realiza una **baja lógica** sobre el campo `available`, según lo indicado por el profesor en clase. El servicio **no se elimina del archivo**: se marca con `available: false` y sigue siendo consultable por su id.
+
+Devuelve el servicio dado de baja:
+
+```json
+{
+  "id": 1,
+  "name": "Mecánica",
+  "description": "Servicio de mecanica general",
+  "duration": 30,
+  "price": 9500,
+  "category": "mecanica",
+  "available": false
+}
+```
+
+Responde `404` si el servicio no existe.
+
+Al consultarlo después con `GET /api/services/1` sigue respondiendo `200` con `available: false`. Ese es el comportamiento correcto de una baja lógica, no una falla del endpoint.
 
 ## Endpoints de bookings
 
