@@ -1,8 +1,10 @@
 # API REST - Sistema de Turnos y Reservas
 
-Pre-entrega 3 del curso Programación Backend I (CoderHouse).
+Pre-entrega 4 del curso Programación Backend I (CoderHouse).
 
-API REST construida con Express que expone dos recursos: `services` (los servicios que pueden reservarse) y `bookings` (las reservas de los clientes). Cada recurso tiene su propio router (`express.Router()`) y su manager, que encapsula la lógica de acceso a los datos y persiste la información en archivos JSON.
+API REST construida con Express que expone dos recursos: `services` (los servicios que pueden reservarse) y `bookings` (las reservas de los clientes), con persistencia en archivos JSON.
+
+El proyecto está organizado en tres capas, cada una con una responsabilidad única.
 
 ## Nota sobre el DELETE de servicios
 
@@ -53,20 +55,81 @@ pnpm run dev      # modo desarrollo con reinicio automático
 
 El servidor queda escuchando en `http://localhost:8080`.
 
+## Organización en capas
+
+Una petición atraviesa tres capas antes de llegar a los datos, y cada una hace una sola cosa:
+
+```
+cliente  ->  router  ->  controller  ->  manager  ->  archivo JSON
+```
+
+**Routers.** Declaran los endpoints y los asocian con la función del controller que los atiende. No contienen lógica: ni validaciones, ni acceso a datos, ni manejo de la respuesta.
+
+```js
+// src/routes/services.router.js
+router.get("/:id", getServiceById);
+router.post("/", createService);
+```
+
+**Controllers.** Son el puente con HTTP. Leen `req.params`, `req.query` y `req.body`, le piden el trabajo al manager y arman la respuesta con `res.status().json()`. No saben cómo ni dónde se guardan los datos.
+
+```js
+// src/controllers/services.controller.js
+export const getServiceById = async (req, res) => {
+  const serviceId = req.params.id;
+  const service = await serviceManager.getServiceById(serviceId);
+  ...
+};
+```
+
+**Managers.** Manejan los datos y las reglas de negocio: leen y escriben los archivos JSON, generan los ids, validan los campos obligatorios. No conocen Express: no reciben `req` ni `res`, y devuelven datos o `null`.
+
+```js
+// src/managers/ServiceManager.js
+async getServiceById(id) {
+  const services = await this.getServices();
+  return services.find((s) => s.id === numberId) || null;
+}
+```
+
+La ventaja concreta de esta separación: cuando en las próximas etapas la persistencia pase de archivos JSON a MongoDB, solo cambian los managers. Los routers y los controllers quedan intactos, y la API sigue respondiendo igual desde afuera.
+
 ## Estructura
 
 ```
 src/
-  config/env.config.js        configuración y validación de variables de entorno
-  managers/ServiceManager.js  acceso a los datos de servicios
-  managers/BookingManager.js  acceso a los datos de reservas
-  routes/services.router.js   rutas del recurso services
-  routes/bookings.router.js   rutas del recurso bookings
-  data/services.json          persistencia de servicios
-  data/bookings.json          persistencia de reservas
-  app.js                      configuración de Express
-  server.js                   levanta el servidor
+  config/
+    env.config.js               configuración y validación de variables de entorno
+  routes/
+    services.router.js          endpoints de services
+    bookings.router.js          endpoints de bookings
+  controllers/
+    services.controller.js      request/response de services
+    bookings.controller.js      request/response de bookings
+  managers/
+    ServiceManager.js           datos y reglas de negocio de services
+    BookingManager.js           datos y reglas de negocio de bookings
+  data/
+    services.json               persistencia de servicios
+    bookings.json               persistencia de reservas
+  app.js                        configuración de Express y montaje de routers
+  server.js                     levanta el servidor
 ```
+
+### Correspondencia entre capas
+
+| Endpoint | Controller | Manager |
+|---|---|---|
+| `GET /api/services` | `getServices` | `ServiceManager.getServices` |
+| `GET /api/services/:sid` | `getServiceById` | `ServiceManager.getServiceById` |
+| `POST /api/services` | `createService` | `ServiceManager.addService` |
+| `PUT /api/services/:sid` | `updateService` | `ServiceManager.updateService` |
+| `DELETE /api/services/:sid` | `deleteService` | `ServiceManager.deleteService` |
+| `POST /api/bookings` | `createBooking` | `BookingManager.createBooking` |
+| `GET /api/bookings/:bid` | `getBookingById` | `BookingManager.getBookingById` |
+| `POST /api/bookings/:bid/services/:sid` | `addServiceToBooking` | `BookingManager.addServiceToBooking` |
+
+En `addServiceToBooking`, el controller consulta primero al `BookingManager` y al `ServiceManager` para verificar que existan la reserva y el servicio, y así poder informar cuál de los dos falta.
 
 ## Recurso: services
 
