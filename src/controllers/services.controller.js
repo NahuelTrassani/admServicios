@@ -1,19 +1,9 @@
-import ServiceManager from "../managers/ServiceManager.js";
-
-const serviceManager = new ServiceManager();
+import * as servicesService from "../services/services.service.js";
 
 export const getServices = async (req, res) => {
   const { category, available } = req.query;
   try {
-    const services = await serviceManager.getServices();
-    let result = services;
-    //filtrar por req.query - category y available
-    if (category) {
-      result = result.filter((s) => s.category === category);
-    }
-    if (available) {
-      result = result.filter((s) => s.available === (available === "true"));
-    }
+    const result = await servicesService.getServices({ category, available });
     res.status(200).json(result); //devuelve 200 y el resultado
   } catch (error) {
     res.status(500).json({ error: "Error al obtener los servicios" }); //error 500 y msj error.
@@ -23,7 +13,7 @@ export const getServices = async (req, res) => {
 export const getServiceById = async (req, res) => {
   const serviceId = req.params.id;
   try {
-    const service = await serviceManager.getServiceById(serviceId);
+    const service = await servicesService.getServiceById(serviceId);
     if (service) {
       res.status(200).json(service);
     } else {
@@ -37,7 +27,7 @@ export const getServiceById = async (req, res) => {
 export const createService = async (req, res) => {
   const serviceData = req.body;
   try {
-    const newService = await serviceManager.addService(serviceData);
+    const newService = await servicesService.createService(serviceData);
     if (newService) {
       res.status(201).json(newService);
     } else {
@@ -54,7 +44,7 @@ export const updateService = async (req, res) => {
   const serviceData = req.body;
   const serviceId = req.params.id;
   try {
-    const newService = await serviceManager.updateService(
+    const newService = await servicesService.updateService(
       serviceId,
       serviceData,
     );
@@ -71,7 +61,7 @@ export const updateService = async (req, res) => {
 export const deleteService = async (req, res) => {
   const serviceId = req.params.id;
   try {
-    const deletedService = await serviceManager.deleteService(serviceId);
+    const deletedService = await servicesService.deleteService(serviceId);
     if (deletedService) {
       res.status(200).json(deletedService);
     } else {

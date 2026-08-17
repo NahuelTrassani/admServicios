@@ -1,10 +1,10 @@
 # API REST - Sistema de Turnos y Reservas
 
-Pre-entrega 4 del curso Programación Backend I (CoderHouse).
+Pre-entrega 5 del curso Programación Backend I (CoderHouse).
 
 API REST construida con Express que expone dos recursos: `services` (los servicios que pueden reservarse) y `bookings` (las reservas de los clientes), con persistencia en archivos JSON.
 
-El proyecto está organizado en tres capas, cada una con una responsabilidad única.
+El proyecto está organizado en cinco capas —router, controller, service, repository y DAO— cada una con una responsabilidad única y sin conocer más que la siguiente.
 
 ## Nota sobre el DELETE de servicios
 
@@ -55,44 +55,106 @@ pnpm run dev      # modo desarrollo con reinicio automático
 
 El servidor queda escuchando en `http://localhost:8080`.
 
-## Organización en capas
+## Arquitectura en capas
 
-Una petición atraviesa tres capas antes de llegar a los datos, y cada una hace una sola cosa:
+Una petición atraviesa cinco capas antes de llegar a los datos. Cada una tiene una sola responsabilidad y solo conoce a la siguiente:
 
 ```
-cliente  ->  router  ->  controller  ->  manager  ->  archivo JSON
+cliente  ->  router  ->  controller  ->  service  ->  repository  ->  DAO  ->  archivo JSON
 ```
 
-**Routers.** Declaran los endpoints y los asocian con la función del controller que los atiende. No contienen lógica: ni validaciones, ni acceso a datos, ni manejo de la respuesta.
+### Router
+
+Declara los endpoints y los asocia con la función del controller que los atiende. No contiene lógica: ni validaciones, ni acceso a datos, ni manejo de la respuesta.
 
 ```js
 // src/routes/services.router.js
 router.get("/:id", getServiceById);
-router.post("/", createService);
+router.delete("/:id", deleteService);
 ```
 
-**Controllers.** Son el puente con HTTP. Leen `req.params`, `req.query` y `req.body`, le piden el trabajo al manager y arman la respuesta con `res.status().json()`. No saben cómo ni dónde se guardan los datos.
+### Controller
+
+Es el puente con HTTP y la única capa que conoce Express. Lee `req.params`, `req.query` y `req.body`, le pide el trabajo al service y arma la respuesta con `res.status().json()`. No sabe cómo ni dónde se guardan los datos.
 
 ```js
 // src/controllers/services.controller.js
 export const getServiceById = async (req, res) => {
   const serviceId = req.params.id;
-  const service = await serviceManager.getServiceById(serviceId);
-  ...
+  try {
+    const service = await servicesService.getServiceById(serviceId);
+    if (service) {
+      res.status(200).json(service);
+    } else {
+      res.status(404).json({ error: "Servicio no encontrado" });
+    }
+  } catch (error) {
+    res.status(500).json({ error: "Error al obtener el servicio" });
+  }
 };
 ```
 
-**Managers.** Manejan los datos y las reglas de negocio: leen y escriben los archivos JSON, generan los ids, validan los campos obligatorios. No conocen Express: no reciben `req` ni `res`, y devuelven datos o `null`.
+### Service
+
+Concentra las reglas de negocio: qué hace válido a un servicio, qué significa dar de baja, cómo se filtra un listado, qué pasa si un servicio ya está en una reserva. No recibe `req` ni `res`, y devuelve datos o `null`.
 
 ```js
-// src/managers/ServiceManager.js
-async getServiceById(id) {
-  const services = await this.getServices();
-  return services.find((s) => s.id === numberId) || null;
+// src/services/services.service.js
+export const deleteService = async (id) => {
+  //dar de baja es marcar como no disponible, no borrar el registro
+  return servicesRepository.update(id, { available: false });
+};
+```
+
+### Repository
+
+Ofrece los métodos de acceso a datos y desacopla al service de la fuente concreta. Recibe su DAO por inyección en el constructor, así que cambiar de origen de datos no lo obliga a cambiar.
+
+```js
+// src/repositories/services.repository.js
+class ServicesRepository {
+  constructor(dao) {
+    this.dao = dao;
+  }
+
+  async update(id, data) {
+    return this.dao.update(id, data);
+  }
+}
+
+export default new ServicesRepository(servicesDao);
+```
+
+### DAO
+
+Lee y escribe el archivo JSON. Es la única capa que importa `fs`, y no contiene ninguna regla de negocio: recibe datos, los guarda, los devuelve.
+
+```js
+// src/dao/services.dao.js
+async getAll() {
+  try {
+    const data = await fs.readFile(this.path, "utf-8");
+    return JSON.parse(data);
+  } catch (error) {
+    return [];
+  }
 }
 ```
 
-La ventaja concreta de esta separación: cuando en las próximas etapas la persistencia pase de archivos JSON a MongoDB, solo cambian los managers. Los routers y los controllers quedan intactos, y la API sigue respondiendo igual desde afuera.
+### El idioma cambia al bajar de capa
+
+Arriba se habla en términos del negocio; abajo, en términos de datos. Por eso los nombres no coinciden, y eso es deliberado:
+
+| Operación del negocio | Se resuelve abajo como |
+|---|---|
+| `deleteService` — dar de baja un servicio | `update` con `available: false` |
+| `addServiceToBooking` — agregar un servicio a una reserva | `update` del array `services` |
+
+En los dos casos, la decisión de *qué significa* la operación vive en el service. El DAO solo ejecuta una escritura: no sabe qué es una baja lógica ni qué es una cantidad.
+
+### Qué gana el proyecto con esto
+
+Cuando la persistencia pase de archivos JSON a MongoDB, el cambio queda contenido en la capa DAO. El repository recibe otro DAO por su constructor y ni se enteran el service, el controller ni el router. La API sigue respondiendo igual desde afuera.
 
 ## Estructura
 
@@ -106,9 +168,15 @@ src/
   controllers/
     services.controller.js      request/response de services
     bookings.controller.js      request/response de bookings
-  managers/
-    ServiceManager.js           datos y reglas de negocio de services
-    BookingManager.js           datos y reglas de negocio de bookings
+  services/
+    services.service.js         reglas de negocio de services
+    bookings.service.js         reglas de negocio de bookings
+  repositories/
+    services.repository.js      acceso a datos de services
+    bookings.repository.js      acceso a datos de bookings
+  dao/
+    services.dao.js             lectura y escritura de services.json
+    bookings.dao.js             lectura y escritura de bookings.json
   data/
     services.json               persistencia de servicios
     bookings.json               persistencia de reservas
@@ -118,18 +186,20 @@ src/
 
 ### Correspondencia entre capas
 
-| Endpoint | Controller | Manager |
+| Endpoint | Controller y Service | Repository y DAO |
 |---|---|---|
-| `GET /api/services` | `getServices` | `ServiceManager.getServices` |
-| `GET /api/services/:sid` | `getServiceById` | `ServiceManager.getServiceById` |
-| `POST /api/services` | `createService` | `ServiceManager.addService` |
-| `PUT /api/services/:sid` | `updateService` | `ServiceManager.updateService` |
-| `DELETE /api/services/:sid` | `deleteService` | `ServiceManager.deleteService` |
-| `POST /api/bookings` | `createBooking` | `BookingManager.createBooking` |
-| `GET /api/bookings/:bid` | `getBookingById` | `BookingManager.getBookingById` |
-| `POST /api/bookings/:bid/services/:sid` | `addServiceToBooking` | `BookingManager.addServiceToBooking` |
+| `GET /api/services` | `getServices` | `getAll` |
+| `GET /api/services/:sid` | `getServiceById` | `getById` |
+| `POST /api/services` | `createService` | `create` |
+| `PUT /api/services/:sid` | `updateService` | `update` |
+| `DELETE /api/services/:sid` | `deleteService` | `update` |
+| `POST /api/bookings` | `createBooking` | `create` |
+| `GET /api/bookings/:bid` | `getBookingById` | `getById` |
+| `POST /api/bookings/:bid/services/:sid` | `addServiceToBooking` | `getById` + `update` |
 
-En `addServiceToBooking`, el controller consulta primero al `BookingManager` y al `ServiceManager` para verificar que existan la reserva y el servicio, y así poder informar cuál de los dos falta.
+Las dos últimas filas muestran por qué los nombres no coinciden entre capas: `deleteService` y `addServiceToBooking` son operaciones del negocio que abajo se resuelven con un `update`. Por eso el DAO no tiene método `delete`.
+
+En `addServiceToBooking`, el controller consulta por separado la reserva y el servicio antes de llamar al service, para poder responder cuál de los dos falta. El service vuelve a validar ambos, de modo que no dependa de que su llamador lo haga.
 
 ## Recurso: services
 
