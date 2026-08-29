@@ -1,6 +1,11 @@
-import app from './app.js';
-import config from './config/env.config.js';
+import app from "./app.js";
+import config from "./config/env.config.js";
+import { connectDB } from "./config/db.config.js";
+
+await connectDB();
 
 app.listen(config.port, () => {
-    console.log(`App ejecutando en modo ${config.nodeEnv} - puerto ${config.port}`);
+  console.log(
+    `App ejecutando en modo ${config.nodeEnv} - puerto ${config.port}`,
+  );
 });

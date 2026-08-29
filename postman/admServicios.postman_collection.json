@@ -1,27 +1,156 @@
 {
   "info": {
-    "name": "admServicios - Turnos y Reservas",
-    "description": "Casos de prueba de la API. Cada request valida el codigo de estado esperado y el contenido relevante. Correr con el servidor levantado (pnpm start).",
+    "name": "admServicios - Turnos y Reservas (MongoDB)",
+    "description": "Casos de prueba de la API sobre MongoDB Atlas. Los identificadores son ObjectId, por lo que la coleccion los captura de las respuestas en vez de usar valores fijos. Correr con el servidor levantado (pnpm start).",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:8080"
-    },
-    {
-      "key": "nuevoServicioId",
-      "value": ""
-    },
-    {
-      "key": "nuevaReservaId",
-      "value": ""
-    }
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "servicioId", "value": "" },
+    { "key": "servicioId2", "value": "" },
+    { "key": "reservaId", "value": "" },
+    { "key": "idInexistente", "value": "000000000000000000000000" }
   ],
   "item": [
     {
       "name": "Services",
       "item": [
+        {
+          "name": "POST crear servicio -> 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('genera el _id automaticamente', () => {",
+                  "  pm.expect(body._id).to.be.a('string');",
+                  "  pm.expect(body._id).to.match(/^[0-9a-f]{24}$/);",
+                  "});",
+                  "pm.test('guarda los datos enviados', () => pm.expect(body.name).to.eql('Gasista'));",
+                  "pm.collectionVariables.set('servicioId', body._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Gasista\",\n  \"description\": \"Instalacion y reparacion de gas\",\n  \"duration\": 90,\n  \"price\": 12000,\n  \"category\": \"gas\",\n  \"available\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"]
+            }
+          }
+        },
+        {
+          "name": "POST segundo servicio -> 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('servicioId2', pm.response.json()._id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Electricista\",\n  \"description\": \"Instalaciones electricas\",\n  \"duration\": 60,\n  \"price\": 14000,\n  \"category\": \"gas\",\n  \"available\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"]
+            }
+          }
+        },
+        {
+          "name": "POST con precio 0 -> 201 (0 es valido)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('acepta price 0', () => pm.expect(pm.response.json().price).to.eql(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Presupuesto sin cargo\",\n  \"description\": \"Visita de diagnostico gratuita\",\n  \"duration\": 15,\n  \"price\": 0,\n  \"category\": \"varios\",\n  \"available\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"]
+            }
+          }
+        },
+        {
+          "name": "POST con campo faltante -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 400', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Incompleto\",\n  \"description\": \"Le falta el precio\",\n  \"duration\": 30,\n  \"category\": \"varios\",\n  \"available\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"]
+            }
+          }
+        },
+        {
+          "name": "POST sin body -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('status 400 y no 500', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "services"]
+            }
+          }
+        },
         {
           "name": "GET listar todos -> 200",
           "event": [
@@ -31,7 +160,10 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "pm.test('devuelve un array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                  "pm.test('devuelve un array', () => pm.expect(pm.response.json()).to.be.an('array'));",
+                  "pm.test('los documentos vienen de mongo', () => {",
+                  "  pm.expect(pm.response.json()[0]).to.have.property('_id');",
+                  "});"
                 ]
               }
             }
@@ -56,7 +188,9 @@
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
                   "pm.test('todos son de la categoria pedida', () => {",
-                  "  pm.response.json().forEach(s => pm.expect(s.category).to.eql('informatica'));",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.length).to.be.above(0);",
+                  "  r.forEach(s => pm.expect(s.category).to.eql('gas'));",
                   "});"
                 ]
               }
@@ -66,10 +200,10 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/services?category=informatica",
+              "raw": "{{baseUrl}}/api/services?category=gas",
               "host": ["{{baseUrl}}"],
               "path": ["api", "services"],
-              "query": [{ "key": "category", "value": "informatica" }]
+              "query": [{ "key": "category", "value": "gas" }]
             }
           }
         },
@@ -111,8 +245,8 @@
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
                   "pm.test('cumple los dos filtros', () => {",
                   "  pm.response.json().forEach(s => {",
-                  "    pm.expect(s.category).to.eql('informatica');",
-                  "    pm.expect(s.available).to.eql(false);",
+                  "    pm.expect(s.category).to.eql('gas');",
+                  "    pm.expect(s.available).to.eql(true);",
                   "  });",
                   "});"
                 ]
@@ -123,12 +257,12 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/services?category=informatica&available=false",
+              "raw": "{{baseUrl}}/api/services?category=gas&available=true",
               "host": ["{{baseUrl}}"],
               "path": ["api", "services"],
               "query": [
-                { "key": "category", "value": "informatica" },
-                { "key": "available", "value": "false" }
+                { "key": "category", "value": "gas" },
+                { "key": "available", "value": "true" }
               ]
             }
           }
@@ -142,7 +276,9 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "pm.test('devuelve el id pedido', () => pm.expect(pm.response.json().id).to.eql(1));"
+                  "pm.test('devuelve el id pedido', () => {",
+                  "  pm.expect(pm.response.json()._id).to.eql(pm.collectionVariables.get('servicioId'));",
+                  "});"
                 ]
               }
             }
@@ -151,9 +287,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/services/1",
+              "raw": "{{baseUrl}}/api/services/{{servicioId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "services", "1"]
+              "path": ["api", "services", "{{servicioId}}"]
             }
           }
         },
@@ -164,9 +300,7 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 404', () => pm.response.to.have.status(404));"
-                ]
+                "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"]
               }
             }
           ],
@@ -174,22 +308,20 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/services/999",
+              "raw": "{{baseUrl}}/api/services/{{idInexistente}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "services", "999"]
+              "path": ["api", "services", "{{idInexistente}}"]
             }
           }
         },
         {
-          "name": "GET por id no numerico -> 404",
+          "name": "GET con id que no es ObjectId -> 404",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 404', () => pm.response.to.have.status(404));"
-                ]
+                "exec": ["pm.test('status 404 y no 500', () => pm.response.to.have.status(404));"]
               }
             }
           ],
@@ -204,115 +336,6 @@
           }
         },
         {
-          "name": "POST crear valido -> 201",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 201', () => pm.response.to.have.status(201));",
-                  "const body = pm.response.json();",
-                  "pm.test('genera el id automaticamente', () => pm.expect(body.id).to.be.a('number'));",
-                  "pm.test('guarda los datos enviados', () => pm.expect(body.name).to.eql('Gasista'));",
-                  "pm.collectionVariables.set('nuevoServicioId', body.id);"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Gasista\",\n  \"description\": \"Instalacion y reparacion de gas\",\n  \"duration\": 90,\n  \"price\": 12000,\n  \"category\": \"gas\",\n  \"available\": true\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/services",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "services"]
-            }
-          }
-        },
-        {
-          "name": "POST con campo faltante -> 400",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 400', () => pm.response.to.have.status(400));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Incompleto\",\n  \"description\": \"Le falta el precio\",\n  \"duration\": 30,\n  \"category\": \"varios\",\n  \"available\": true\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/services",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "services"]
-            }
-          }
-        },
-        {
-          "name": "POST con precio 0 -> 201 (0 es valido)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 201', () => pm.response.to.have.status(201));",
-                  "pm.test('acepta price 0', () => pm.expect(pm.response.json().price).to.eql(0));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Presupuesto sin cargo\",\n  \"description\": \"Visita de diagnostico gratuita\",\n  \"duration\": 15,\n  \"price\": 0,\n  \"category\": \"varios\",\n  \"available\": true\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/services",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "services"]
-            }
-          }
-        },
-        {
-          "name": "POST sin body -> 400",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 400 y no 500', () => pm.response.to.have.status(400));"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/services",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "services"]
-            }
-          }
-        },
-        {
           "name": "PUT actualizar -> 200 (el id no cambia)",
           "event": [
             {
@@ -322,9 +345,9 @@
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
                   "const body = pm.response.json();",
-                  "pm.test('actualiza el precio', () => pm.expect(body.price).to.eql(15000));",
+                  "pm.test('devuelve el documento ya actualizado', () => pm.expect(body.price).to.eql(15000));",
                   "pm.test('conserva el id original', () => {",
-                  "  pm.expect(body.id).to.eql(Number(pm.collectionVariables.get('nuevoServicioId')));",
+                  "  pm.expect(body._id).to.eql(pm.collectionVariables.get('servicioId'));",
                   "});"
                 ]
               }
@@ -333,14 +356,11 @@
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"price\": 15000,\n  \"id\": 999\n}"
-            },
+            "body": { "mode": "raw", "raw": "{\n  \"price\": 15000\n}" },
             "url": {
-              "raw": "{{baseUrl}}/api/services/{{nuevoServicioId}}",
+              "raw": "{{baseUrl}}/api/services/{{servicioId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "services", "{{nuevoServicioId}}"]
+              "path": ["api", "services", "{{servicioId}}"]
             }
           }
         },
@@ -351,23 +371,18 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 404', () => pm.response.to.have.status(404));"
-                ]
+                "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"]
               }
             }
           ],
           "request": {
             "method": "PUT",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"price\": 100\n}"
-            },
+            "body": { "mode": "raw", "raw": "{\n  \"price\": 100\n}" },
             "url": {
-              "raw": "{{baseUrl}}/api/services/999",
+              "raw": "{{baseUrl}}/api/services/{{idInexistente}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "services", "999"]
+              "path": ["api", "services", "{{idInexistente}}"]
             }
           }
         },
@@ -389,21 +404,21 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/services/{{nuevoServicioId}}",
+              "raw": "{{baseUrl}}/api/services/{{servicioId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "services", "{{nuevoServicioId}}"]
+              "path": ["api", "services", "{{servicioId}}"]
             }
           }
         },
         {
-          "name": "DELETE verifica que el registro sigue existiendo -> 200",
+          "name": "GET verifica que el documento sigue existiendo -> 200",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('el servicio no se borro del archivo', () => pm.response.to.have.status(200));",
+                  "pm.test('el servicio no se borro de la coleccion', () => pm.response.to.have.status(200));",
                   "pm.test('quedo con available false', () => pm.expect(pm.response.json().available).to.eql(false));"
                 ]
               }
@@ -413,9 +428,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/services/{{nuevoServicioId}}",
+              "raw": "{{baseUrl}}/api/services/{{servicioId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "services", "{{nuevoServicioId}}"]
+              "path": ["api", "services", "{{servicioId}}"]
             }
           }
         },
@@ -426,9 +441,7 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 404', () => pm.response.to.have.status(404));"
-                ]
+                "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"]
               }
             }
           ],
@@ -436,9 +449,9 @@
             "method": "DELETE",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/services/999",
+              "raw": "{{baseUrl}}/api/services/{{idInexistente}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "services", "999"]
+              "path": ["api", "services", "{{idInexistente}}"]
             }
           }
         }
@@ -457,9 +470,9 @@
                 "exec": [
                   "pm.test('status 201', () => pm.response.to.have.status(201));",
                   "const body = pm.response.json();",
-                  "pm.test('genera el id automaticamente', () => pm.expect(body.id).to.be.a('number'));",
+                  "pm.test('genera el _id automaticamente', () => pm.expect(body._id).to.match(/^[0-9a-f]{24}$/));",
                   "pm.test('nace con services vacio', () => pm.expect(body.services).to.eql([]));",
-                  "pm.collectionVariables.set('nuevaReservaId', body.id);"
+                  "pm.collectionVariables.set('reservaId', body._id);"
                 ]
               }
             }
@@ -469,7 +482,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"clientName\": \"Carlos Gomez\",\n  \"clientEmail\": \"carlos@gmail.com\",\n  \"date\": \"2026-08-20\",\n  \"time\": \"10:30\",\n  \"status\": \"pendiente\"\n}"
+              "raw": "{\n  \"clientName\": \"Carlos Gomez\",\n  \"clientEmail\": \"carlos@gmail.com\",\n  \"date\": \"2026-09-20\",\n  \"time\": \"10:30\",\n  \"status\": \"pendiente\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/bookings",
@@ -485,9 +498,7 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 400', () => pm.response.to.have.status(400));"
-                ]
+                "exec": ["pm.test('status 400', () => pm.response.to.have.status(400));"]
               }
             }
           ],
@@ -496,7 +507,7 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"clientName\": \"Sin email\",\n  \"date\": \"2026-08-20\",\n  \"time\": \"10:30\",\n  \"status\": \"pendiente\"\n}"
+              "raw": "{\n  \"clientName\": \"Sin email\",\n  \"date\": \"2026-09-20\",\n  \"time\": \"10:30\",\n  \"status\": \"pendiente\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/bookings",
@@ -512,9 +523,7 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 400 y no 500', () => pm.response.to.have.status(400));"
-                ]
+                "exec": ["pm.test('status 400 y no 500', () => pm.response.to.have.status(400));"]
               }
             }
           ],
@@ -538,7 +547,7 @@
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
                   "pm.test('devuelve la reserva pedida', () => {",
-                  "  pm.expect(pm.response.json().id).to.eql(Number(pm.collectionVariables.get('nuevaReservaId')));",
+                  "  pm.expect(pm.response.json()._id).to.eql(pm.collectionVariables.get('reservaId'));",
                   "});"
                 ]
               }
@@ -548,9 +557,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}",
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "bookings", "{{nuevaReservaId}}"]
+              "path": ["api", "bookings", "{{reservaId}}"]
             }
           }
         },
@@ -561,9 +570,7 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 404', () => pm.response.to.have.status(404));"
-                ]
+                "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"]
               }
             }
           ],
@@ -571,14 +578,14 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/bookings/999",
+              "raw": "{{baseUrl}}/api/bookings/{{idInexistente}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "bookings", "999"]
+              "path": ["api", "bookings", "{{idInexistente}}"]
             }
           }
         },
         {
-          "name": "POST agregar servicio a reserva -> 200 (quantity 1)",
+          "name": "POST agregar servicio -> 200 (quantity 1)",
           "event": [
             {
               "listen": "test",
@@ -586,12 +593,15 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "const item = pm.response.json().services.find(s => s.service === 1);",
+                  "const sid = pm.collectionVariables.get('servicioId');",
+                  "const item = pm.response.json().services.find(s => s.service === sid);",
                   "pm.test('agrega el servicio', () => pm.expect(item).to.not.be.undefined);",
                   "pm.test('arranca en quantity 1', () => pm.expect(item.quantity).to.eql(1));",
-                  "pm.test('guarda solo el id, no el objeto completo', () => {",
-                  "  pm.expect(Object.keys(item).sort()).to.eql(['quantity', 'service']);",
-                  "  pm.expect(item.service).to.be.a('number');",
+                  "pm.test('guarda solo la referencia, no el objeto completo', () => {",
+                  "  pm.expect(item.service).to.be.a('string');",
+                  "  pm.expect(item.service).to.match(/^[0-9a-f]{24}$/);",
+                  "  pm.expect(item).to.not.have.property('name');",
+                  "  pm.expect(item).to.not.have.property('price');",
                   "});"
                 ]
               }
@@ -601,9 +611,9 @@
             "method": "POST",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}/services/1",
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}/services/{{servicioId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "bookings", "{{nuevaReservaId}}", "services", "1"]
+              "path": ["api", "bookings", "{{reservaId}}", "services", "{{servicioId}}"]
             }
           }
         },
@@ -616,8 +626,8 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "const services = pm.response.json().services;",
-                  "const repetidos = services.filter(s => s.service === 1);",
+                  "const sid = pm.collectionVariables.get('servicioId');",
+                  "const repetidos = pm.response.json().services.filter(s => s.service === sid);",
                   "pm.test('no duplica la entrada', () => pm.expect(repetidos.length).to.eql(1));",
                   "pm.test('incrementa quantity a 2', () => pm.expect(repetidos[0].quantity).to.eql(2));"
                 ]
@@ -628,9 +638,9 @@
             "method": "POST",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}/services/1",
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}/services/{{servicioId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "bookings", "{{nuevaReservaId}}", "services", "1"]
+              "path": ["api", "bookings", "{{reservaId}}", "services", "{{servicioId}}"]
             }
           }
         },
@@ -643,8 +653,9 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "const services = pm.response.json().services;",
-                  "pm.test('ahora hay dos servicios distintos', () => pm.expect(services.length).to.eql(2));"
+                  "pm.test('ahora hay dos servicios distintos', () => {",
+                  "  pm.expect(pm.response.json().services.length).to.eql(2);",
+                  "});"
                 ]
               }
             }
@@ -653,9 +664,9 @@
             "method": "POST",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}/services/4",
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}/services/{{servicioId2}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "bookings", "{{nuevaReservaId}}", "services", "4"]
+              "path": ["api", "bookings", "{{reservaId}}", "services", "{{servicioId2}}"]
             }
           }
         },
@@ -666,9 +677,7 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 404', () => pm.response.to.have.status(404));"
-                ]
+                "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"]
               }
             }
           ],
@@ -676,15 +685,9 @@
             "method": "POST",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}/services/999",
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}/services/{{idInexistente}}",
               "host": ["{{baseUrl}}"],
-              "path": [
-                "api",
-                "bookings",
-                "{{nuevaReservaId}}",
-                "services",
-                "999"
-              ]
+              "path": ["api", "bookings", "{{reservaId}}", "services", "{{idInexistente}}"]
             }
           }
         },
@@ -695,9 +698,7 @@
               "listen": "test",
               "script": {
                 "type": "text/javascript",
-                "exec": [
-                  "pm.test('status 404', () => pm.response.to.have.status(404));"
-                ]
+                "exec": ["pm.test('status 404', () => pm.response.to.have.status(404));"]
               }
             }
           ],
@@ -705,9 +706,9 @@
             "method": "POST",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/bookings/999/services/1",
+              "raw": "{{baseUrl}}/api/bookings/{{idInexistente}}/services/{{servicioId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "bookings", "999", "services", "1"]
+              "path": ["api", "bookings", "{{idInexistente}}", "services", "{{servicioId}}"]
             }
           }
         },
@@ -720,10 +721,11 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const sid = pm.collectionVariables.get('servicioId');",
                   "const services = pm.response.json().services;",
-                  "pm.test('la relacion quedo guardada en el archivo', () => {",
+                  "pm.test('la relacion quedo guardada en mongo', () => {",
                   "  pm.expect(services.length).to.eql(2);",
-                  "  pm.expect(services.find(s => s.service === 1).quantity).to.eql(2);",
+                  "  pm.expect(services.find(s => s.service === sid).quantity).to.eql(2);",
                   "});"
                 ]
               }
@@ -733,9 +735,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/bookings/{{nuevaReservaId}}",
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}",
               "host": ["{{baseUrl}}"],
-              "path": ["api", "bookings", "{{nuevaReservaId}}"]
+              "path": ["api", "bookings", "{{reservaId}}"]
             }
           }
         }

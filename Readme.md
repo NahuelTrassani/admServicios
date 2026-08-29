@@ -1,8 +1,8 @@
 # API REST - Sistema de Turnos y Reservas
 
-Pre-entrega 5 del curso Programación Backend I (CoderHouse).
+Pre-entrega 6 del curso Programación Backend I (CoderHouse).
 
-API REST construida con Express que expone dos recursos: `services` (los servicios que pueden reservarse) y `bookings` (las reservas de los clientes), con persistencia en archivos JSON.
+API REST construida con Express que expone dos recursos: `services` (los servicios que pueden reservarse) y `bookings` (las reservas de los clientes), con persistencia en **MongoDB Atlas** mediante Mongoose.
 
 El proyecto está organizado en cinco capas —router, controller, service, repository y DAO— cada una con una responsabilidad única y sin conocer más que la siguiente.
 
@@ -10,18 +10,18 @@ El proyecto está organizado en cinco capas —router, controller, service, repo
 
 **El `DELETE /api/services/:sid` realiza una baja lógica, no un borrado físico.** Esta implementación responde a la consigna dada en clase por el profesor.
 
-La baja se registra en el campo `available` de la instancia: al eliminar un servicio, su `available` pasa a `false`. El registro permanece en `services.json` y sigue siendo consultable por su id.
+La baja se registra en el campo `available` del documento: al eliminar un servicio, su `available` pasa a `false`. El registro permanece en la colección y sigue siendo consultable por su id.
 
 Comportamiento esperado al probar el endpoint:
 
 ```
-DELETE /api/services/3   ->  200, devuelve el servicio con "available": false
-GET    /api/services/3   ->  200, el registro sigue existiendo, ahora con "available": false
+DELETE /api/services/:sid   ->  200, devuelve el servicio con "available": false
+GET    /api/services/:sid   ->  200, el registro sigue existiendo, ahora con "available": false
 ```
 
-Que el servicio siga respondiendo después del DELETE **no es un error**: es el resultado de la baja lógica. El servicio queda marcado como no disponible en lugar de desaparecer del archivo.
+Que el servicio siga respondiendo después del DELETE **no es un error**: es el resultado de la baja lógica. El servicio queda marcado como no disponible en lugar de desaparecer de la colección.
 
-Motivo de la decisión: preservar la integridad referencial. Las reservas guardan referencias al `id` del servicio, y un borrado físico dejaría esas reservas apuntando a un registro inexistente. Con la baja lógica se conserva el historial de reservas y el dato sigue siendo consultable.
+Motivo de la decisión: preservar la integridad referencial. Las reservas guardan el `ObjectId` del servicio, y un borrado físico dejaría esas reservas apuntando a un documento inexistente. Con la baja lógica se conserva el historial de reservas y el dato sigue siendo consultable.
 
 Para listar únicamente los servicios activos se usa el filtro por query param:
 
@@ -43,8 +43,19 @@ Copiar `.env.example` como `.env` y completar las variables:
 |----------|-------------|---------|
 | PORT | Puerto de la aplicación | 8080 |
 | NODE_ENV | Entorno de ejecución | development |
+| MONGO_URI | Cadena de conexión a MongoDB Atlas | mongodb+srv://usuario:clave@cluster.mongodb.net/admservicios |
 
-La app valida las variables al iniciar: si falta alguna, el proceso se cierra con un mensaje de error.
+La app valida las tres variables al iniciar: si falta alguna, el proceso se cierra con un mensaje de error. Lo mismo ocurre si la conexión a la base falla, para evitar que el servidor quede escuchando sin persistencia.
+
+### Cómo obtener la URI de MongoDB Atlas
+
+1. Crear una cuenta en [MongoDB Atlas](https://www.mongodb.com/cloud/atlas) y un cluster gratuito (M0)
+2. En **Database Access**, crear un usuario de base de datos con contraseña
+3. En **Network Access**, habilitar la IP desde la que se va a conectar
+4. En el cluster, **Connect → Drivers → Node.js**, copiar la cadena de conexión
+5. Reemplazar `<db_password>` por la contraseña real y agregar el nombre de la base antes del `?`
+
+La contraseña no debe contener caracteres que se usan como separadores de URL (`@`, `:`, `/`, `#`, `&`); si los tiene, hay que codificarlos.
 
 ## Ejecución
 
@@ -60,7 +71,7 @@ El servidor queda escuchando en `http://localhost:8080`.
 Una petición atraviesa cinco capas antes de llegar a los datos. Cada una tiene una sola responsabilidad y solo conoce a la siguiente:
 
 ```
-cliente  ->  router  ->  controller  ->  service  ->  repository  ->  DAO  ->  archivo JSON
+cliente  ->  router  ->  controller  ->  service  ->  repository  ->  DAO  ->  MongoDB
 ```
 
 ### Router
@@ -127,19 +138,26 @@ export default new ServicesRepository(servicesDao);
 
 ### DAO
 
-Lee y escribe el archivo JSON. Es la única capa que importa `fs`, y no contiene ninguna regla de negocio: recibe datos, los guarda, los devuelve.
+Consulta y escribe en MongoDB a través de los modelos de Mongoose. Es la única capa que conoce la base, y no contiene ninguna regla de negocio: recibe datos, los guarda, los devuelve.
 
 ```js
 // src/dao/services.dao.js
-async getAll() {
-  try {
-    const data = await fs.readFile(this.path, "utf-8");
-    return JSON.parse(data);
-  } catch (error) {
-    return [];
+async getById(id) {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return null;
   }
+  return Service.findById(id);
+}
+
+async update(id, data) {
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return null;
+  }
+  return Service.findByIdAndUpdate(id, data, { returnDocument: "after" });
 }
 ```
+
+La validación con `ObjectId.isValid` corta antes de consultar cuando el id no tiene forma válida. Sin ella, Mongoose lanzaría un error de casteo y la API respondería 500 en vez de 404.
 
 ### El idioma cambia al bajar de capa
 
@@ -154,14 +172,15 @@ En los dos casos, la decisión de *qué significa* la operación vive en el serv
 
 ### Qué gana el proyecto con esto
 
-Cuando la persistencia pase de archivos JSON a MongoDB, el cambio queda contenido en la capa DAO. El repository recibe otro DAO por su constructor y ni se enteran el service, el controller ni el router. La API sigue respondiendo igual desde afuera.
+La migración de archivos JSON a MongoDB quedó contenida en la capa DAO. Los routers, controllers y repositories no se tocaron, y del service solo cambió la comparación de identificadores, porque los ids pasaron de números a `ObjectId`. La API responde igual desde afuera.
 
 ## Estructura
 
 ```
 src/
   config/
-    env.config.js               configuración y validación de variables de entorno
+    env.config.js               lectura y validación de variables de entorno
+    db.config.js                conexión a MongoDB Atlas
   routes/
     services.router.js          endpoints de services
     bookings.router.js          endpoints de bookings
@@ -175,11 +194,12 @@ src/
     services.repository.js      acceso a datos de services
     bookings.repository.js      acceso a datos de bookings
   dao/
-    services.dao.js             lectura y escritura de services.json
-    bookings.dao.js             lectura y escritura de bookings.json
-  data/
-    services.json               persistencia de servicios
-    bookings.json               persistencia de reservas
+    services.dao.js             consultas a la colección services
+    bookings.dao.js             consultas a la colección bookings
+  models/
+    service.model.js            schema y model de servicios
+    booking.model.js            schema y model de reservas
+    message.model.js            schema y model de mensajes
   app.js                        configuración de Express y montaje de routers
   server.js                     levanta el servidor
 ```
@@ -207,7 +227,7 @@ Cada servicio tiene la siguiente forma:
 
 ```json
 {
-  "id": 1,
+  "_id": "68b1f2a4c9e77d3b1a4f0012",
   "name": "Mecánica",
   "description": "Servicio de mecánica general",
   "duration": 30,
@@ -217,7 +237,7 @@ Cada servicio tiene la siguiente forma:
 }
 ```
 
-El `id` se genera automáticamente y no puede modificarse.
+El `_id` es un `ObjectId` que genera MongoDB al crear el documento. No se envía en el body ni puede modificarse.
 
 ## Recurso: bookings
 
@@ -225,21 +245,23 @@ Cada reserva tiene la siguiente forma:
 
 ```json
 {
-  "id": 1,
+  "_id": "68b1f2a4c9e77d3b1a4f0099",
   "clientName": "Juan",
   "clientEmail": "juan@gmail.com",
-  "date": "2026-05-03",
+  "date": "2026-05-03T00:00:00.000Z",
   "time": "18:50",
   "status": "pendiente",
   "services": [
-    { "service": 2, "quantity": 1 }
+    { "service": "68b1f2a4c9e77d3b1a4f0012", "quantity": 1 }
   ]
 }
 ```
 
-El `id` se genera automáticamente. Una reserva siempre nace con `services` vacío: los servicios se agregan después con su endpoint.
+Una reserva siempre nace con `services` vacío: los servicios se agregan después con su endpoint.
 
-Dentro de `services` se guarda únicamente la referencia al servicio (su `id`) y la cantidad, nunca el objeto completo. Si el mismo servicio se agrega dos veces, no se duplica la entrada: se incrementa `quantity`.
+Dentro de `services` se guarda únicamente el `ObjectId` del servicio y la cantidad, nunca el documento completo. El schema lo declara con `ref: "Service"`, lo que permite resolver la referencia con `populate` cuando haga falta traer los datos del servicio.
+
+Si el mismo servicio se agrega dos veces, no se duplica la entrada: se incrementa `quantity`.
 
 ## Endpoints de services
 
@@ -274,7 +296,7 @@ GET http://localhost:8080/api/services?category=mecanica&available=true
 ### GET /api/services/:id
 
 ```
-GET http://localhost:8080/api/services/1
+GET http://localhost:8080/api/services/68b1f2a4c9e77d3b1a4f0012
 ```
 
 Devuelve el servicio con ese id, o `404` si no existe.
@@ -304,7 +326,7 @@ Todos los campos son obligatorios. Si falta alguno, responde `400`.
 Actualiza los campos enviados en el body. El `id` se conserva aunque se intente modificar.
 
 ```
-PUT http://localhost:8080/api/services/1
+PUT http://localhost:8080/api/services/68b1f2a4c9e77d3b1a4f0012
 Content-Type: application/json
 
 {
@@ -317,7 +339,7 @@ Responde `404` si el servicio no existe.
 ### DELETE /api/services/:id
 
 ```
-DELETE http://localhost:8080/api/services/1
+DELETE http://localhost:8080/api/services/68b1f2a4c9e77d3b1a4f0012
 ```
 
 Realiza una **baja lógica** sobre el campo `available`, según lo indicado por el profesor en clase. El servicio **no se elimina del archivo**: se marca con `available: false` y sigue siendo consultable por su id.
@@ -326,7 +348,7 @@ Devuelve el servicio dado de baja:
 
 ```json
 {
-  "id": 1,
+  "_id": "68b1f2a4c9e77d3b1a4f0012",
   "name": "Mecánica",
   "description": "Servicio de mecanica general",
   "duration": 30,
@@ -338,7 +360,7 @@ Devuelve el servicio dado de baja:
 
 Responde `404` si el servicio no existe.
 
-Al consultarlo después con `GET /api/services/1` sigue respondiendo `200` con `available: false`. Ese es el comportamiento correcto de una baja lógica, no una falla del endpoint.
+Al consultarlo después con `GET /api/services/:sid` sigue respondiendo `200` con `available: false`. Ese es el comportamiento correcto de una baja lógica, no una falla del endpoint.
 
 ## Endpoints de bookings
 
@@ -372,7 +394,7 @@ Todos los campos son obligatorios. Si falta alguno, responde `400`.
 ### GET /api/bookings/:bid
 
 ```
-GET http://localhost:8080/api/bookings/1
+GET http://localhost:8080/api/bookings/68b1f2a4c9e77d3b1a4f0099
 ```
 
 Devuelve la reserva con ese id, o `404` si no existe.
@@ -382,7 +404,7 @@ Devuelve la reserva con ese id, o `404` si no existe.
 Agrega el servicio `sid` a la reserva `bid`. No lleva body: los dos identificadores viajan en la URL.
 
 ```
-POST http://localhost:8080/api/bookings/1/services/2
+POST http://localhost:8080/api/bookings/68b1f2a4c9e77d3b1a4f0099/services/68b1f2a4c9e77d3b1a4f0012
 ```
 
 Valida que existan tanto la reserva como el servicio; si falta cualquiera de los dos, responde `404`. Si el servicio ya estaba en la reserva, incrementa su `quantity` en lugar de agregarlo de nuevo.
@@ -391,14 +413,14 @@ Devuelve la reserva completa actualizada:
 
 ```json
 {
-  "id": 1,
+  "_id": "68b1f2a4c9e77d3b1a4f0099",
   "clientName": "Juan",
   "clientEmail": "juan@gmail.com",
-  "date": "2026-05-03",
+  "date": "2026-05-03T00:00:00.000Z",
   "time": "18:50",
   "status": "pendiente",
   "services": [
-    { "service": 2, "quantity": 2 }
+    { "service": "68b1f2a4c9e77d3b1a4f0012", "quantity": 2 }
   ]
 }
 ```
@@ -415,6 +437,8 @@ El repositorio incluye una colección lista para importar en `postman/admServici
 
 Para usarla: importar el archivo en Postman, levantar el servidor con `pnpm start` y ejecutar la colección completa con **Run collection**. Cada request valida automáticamente el código de estado y el contenido esperado.
 
+Como los identificadores son `ObjectId` generados por MongoDB, la colección no usa valores fijos: los primeros requests crean los documentos y guardan sus `_id` en variables que reutilizan los siguientes. Por eso conviene ejecutarla completa y en orden.
+
 Casos cubiertos:
 
 | Recurso | Caso | Esperado |
@@ -422,23 +446,24 @@ Casos cubiertos:
 | services | Listar todos | 200 |
 | services | Filtrar por category, por available y ambos combinados | 200 |
 | services | Consultar por id existente | 200 |
-| services | Consultar por id inexistente o no numérico | 404 |
+| services | Consultar por id inexistente | 404 |
+| services | Consultar con un id que no es un ObjectId válido | 404, no 500 |
 | services | Crear con todos los campos | 201 |
 | services | Crear con `price: 0` | 201 |
 | services | Crear con un campo faltante | 400 |
 | services | Crear sin body | 400 |
-| services | Actualizar enviando un `id` distinto | 200, conserva el id original |
+| services | Actualizar | 200, devuelve el documento ya actualizado |
 | services | Actualizar uno inexistente | 404 |
 | services | Dar de baja | 200, queda con `available: false` |
-| services | Verificar que el registro sigue en el archivo | 200 |
+| services | Verificar que el documento sigue en la colección | 200 |
 | services | Dar de baja uno inexistente | 404 |
 | bookings | Crear reserva | 201, con `services` vacío |
 | bookings | Crear con un campo faltante o sin body | 400 |
 | bookings | Consultar por id | 200 |
 | bookings | Consultar una inexistente | 404 |
-| bookings | Agregar un servicio | 200, `quantity: 1` |
+| bookings | Agregar un servicio | 200, `quantity: 1`, guarda solo la referencia |
 | bookings | Agregar el mismo servicio otra vez | 200, `quantity: 2` sin duplicar |
 | bookings | Agregar un segundo servicio distinto | 200, dos entradas |
 | bookings | Agregar un servicio inexistente | 404 |
 | bookings | Agregar a una reserva inexistente | 404 |
-| bookings | Releer la reserva | 200, la relación quedó persistida |
+| bookings | Releer la reserva | 200, la relación quedó persistida en MongoDB |

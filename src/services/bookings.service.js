@@ -26,32 +26,19 @@ export const createBooking = async (data) => {
 };
 
 export const addServiceToBooking = async (bookingId, serviceId) => {
-  const numberBookingId = parseInt(bookingId);
-  const numberServiceId = parseInt(serviceId);
-  if (isNaN(numberBookingId) || isNaN(numberServiceId)) {
-    return null;
-  }
-
-  // const bookings = await bookingsRepository.getAll();
-  // const index = bookings.findIndex((b) => b.id === numberBookingId);
-  // if (index === -1) {
-  //   return null;
-  // }
-
-  const booking = await bookingsRepository.getById(numberBookingId);
+  const booking = await bookingsRepository.getById(bookingId);
   if (!booking) {
     return null;
   }
 
-  //el servicio tiene que existir en services.json
-  const service = await getServiceById(numberServiceId);
+  const service = await getServiceById(serviceId);
   if (!service) {
     return null;
   }
 
   //se guarda solo el id del servicio y la cantidad
   const existing = booking.services.find(
-    (item) => item.service === numberServiceId,
+    (item) => item.service.toString() === serviceId,
   );
 
   if (existing) {
@@ -59,12 +46,12 @@ export const addServiceToBooking = async (bookingId, serviceId) => {
     existing.quantity += 1;
   } else {
     booking.services.push({
-      service: numberServiceId,
+      service: serviceId,
       quantity: 1,
     });
   }
 
-  return bookingsRepository.update(numberBookingId, {
+  return bookingsRepository.update(bookingId, {
     services: booking.services,
   });
 };

@@ -1,7 +1,7 @@
 {
   "name": "adm-servicios",
   "version": "1.0.0",
-  "description": "API REST de turnos y reservas con Node.js, Express y persistencia en FileSystem",
+  "description": "API REST de turnos y reservas con Node.js, Express y MongoDB Atlas",
   "main": "src/server.js",
   "scripts": {
     "dev": "node --watch src/server.js",
@@ -11,6 +11,8 @@
     "node",
     "express",
     "api-rest",
+    "mongodb",
+    "mongoose",
     "turnos",
     "reservas"
   ],
@@ -19,6 +21,7 @@
   "type": "module",
   "dependencies": {
     "dotenv": "^17.4.2",
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "mongoose": "^9.9.3"
   }
 }
