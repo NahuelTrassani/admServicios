@@ -43,9 +43,15 @@ Copiar `.env.example` como `.env` y completar las variables:
 |----------|-------------|---------|
 | PORT | Puerto de la aplicación | 8080 |
 | NODE_ENV | Entorno de ejecución | development |
-| MONGO_URI | Cadena de conexión a MongoDB Atlas | mongodb+srv://usuario:clave@cluster.mongodb.net/admservicios |
+| MONGO_URI | Cadena de conexión a MongoDB Atlas | ver formato abajo |
 
 La app valida las tres variables al iniciar: si falta alguna, el proceso se cierra con un mensaje de error. Lo mismo ocurre si la conexión a la base falla, para evitar que el servidor quede escuchando sin persistencia.
+
+La `MONGO_URI` tiene este formato, reemplazando cada parte entre corchetes por los datos del propio cluster:
+
+```
+mongodb+srv://[USUARIO]:[CONTRASEÑA]@[CLUSTER].mongodb.net/[BASE]?appName=[APP]
+```
 
 ### Cómo obtener la URI de MongoDB Atlas
 
