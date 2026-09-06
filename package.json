@@ -5,7 +5,9 @@
   "main": "src/server.js",
   "scripts": {
     "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [
     "node",
@@ -23,5 +25,8 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "mongoose": "^9.9.3"
+  },
+  "devDependencies": {
+    "vitest": "^5.0.0"
   }
 }

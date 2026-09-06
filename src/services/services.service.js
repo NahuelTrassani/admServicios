@@ -1,4 +1,5 @@
 import servicesRepository from "../repositories/services.repository.js";
+import { esErrorDeValidacion } from "../utils/errors.js";
 
 export const getServices = async (filters = {}) => {
   const services = await servicesRepository.getAll();
@@ -22,26 +23,33 @@ export const getServiceById = async (id) => {
 };
 
 export const createService = async (data) => {
-  //validaciones de negocio
-  if (
-    !data ||
-    !data.name ||
-    !data.description ||
-    data.duration === undefined ||
-    data.price === undefined ||
-    !data.category ||
-    data.available === undefined
-  ) {
+  if (!data) {
     return null;
   }
 
-  return servicesRepository.create(data);
+  try {
+    return await servicesRepository.create(data);
+  } catch (error) {
+    //el schema rechazo el dato: es culpa del cliente, no del servidor
+    if (esErrorDeValidacion(error)) {
+      return null;
+    }
+    throw error;
+  }
 };
 
 export const updateService = async (id, data) => {
-  return servicesRepository.update(id, data);
+  try {
+    return await servicesRepository.update(id, data);
+  } catch (error) {
+    if (esErrorDeValidacion(error)) {
+      return null;
+    }
+    throw error;
+  }
 };
 
 export const deleteService = async (id) => {
+  //dar de baja es marcar como no disponible, no borrar el documento
   return servicesRepository.update(id, { available: false });
 };

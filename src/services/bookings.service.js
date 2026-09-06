@@ -1,5 +1,6 @@
 import bookingsRepository from "../repositories/bookings.repository.js";
 import { getServiceById } from "./services.service.js";
+import { esErrorDeValidacion } from "../utils/errors.js";
 
 export const getBookings = async () => {
   return bookingsRepository.getAll();
@@ -10,19 +11,19 @@ export const getBookingById = async (id) => {
 };
 
 export const createBooking = async (data) => {
-  //no acepta campos vacios -- negocio
-  if (
-    !data ||
-    !data.clientName ||
-    !data.clientEmail ||
-    !data.date ||
-    !data.time ||
-    !data.status
-  ) {
+  if (!data) {
     return null;
   }
 
-  return bookingsRepository.create(data);
+  try {
+    return await bookingsRepository.create(data);
+  } catch (error) {
+    //el schema rechazo el dato: es culpa del cliente, no del servidor
+    if (esErrorDeValidacion(error)) {
+      return null;
+    }
+    throw error;
+  }
 };
 
 export const addServiceToBooking = async (bookingId, serviceId) => {
@@ -31,6 +32,7 @@ export const addServiceToBooking = async (bookingId, serviceId) => {
     return null;
   }
 
+  //el servicio tiene que existir para poder asociarlo
   const service = await getServiceById(serviceId);
   if (!service) {
     return null;
@@ -51,7 +53,14 @@ export const addServiceToBooking = async (bookingId, serviceId) => {
     });
   }
 
-  return bookingsRepository.update(bookingId, {
-    services: booking.services,
-  });
+  try {
+    return await bookingsRepository.update(bookingId, {
+      services: booking.services,
+    });
+  } catch (error) {
+    if (esErrorDeValidacion(error)) {
+      return null;
+    }
+    throw error;
+  }
 };
