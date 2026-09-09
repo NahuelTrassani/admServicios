@@ -222,6 +222,9 @@ src/
     layouts/main.handlebars     estructura común de todas las páginas
     services.handlebars         listado de servicios
     availability.handlebars     reservas y disponibilidad
+    activity.handlebars         actividad del sistema y notas
+  sockets/
+    index.js                    handlers de Socket.io
   utils/
     errors.js                   distingue errores de validación de fallas reales
   app.js                        configuración de Express, Handlebars y routers
@@ -248,6 +251,7 @@ postman/                        colección de pruebas de la API
 | `GET /api/messages` | `getMessages` | `getAll` |
 | `GET /views/services` | `renderServices` | `getAll` |
 | `GET /views/availability` | `renderAvailability` | `getAllPopulated` |
+| `GET /views/activity` | `renderActivity` | `getAll` |
 | `GET /api/messages/:mid` | `getMessageById` | `getById` |
 | `POST /api/messages` | `createMessage` | `create` |
 
@@ -553,6 +557,7 @@ Además de la API, el proyecto renderiza dos páginas en el servidor con **Handl
 |---|---|
 | `/views/services` | Listado de servicios con nombre, descripción, duración, precio, categoría y disponibilidad |
 | `/views/availability` | Reservas con sus servicios asociados, y el total de servicios disponibles |
+| `/views/activity` | Novedades del sistema y notas del equipo, con un formulario para publicar |
 
 Las dos toman los datos de MongoDB pasando por las mismas capas que la API: el controller de vistas llama a los services, no consulta la base por su cuenta.
 
@@ -608,6 +613,7 @@ Cada evento responde a una acción concreta del sistema, no a la conexión de un
 | `DELETE /api/services/:sid` | `servicioActualizado` | la fila pasa a "no disponible" |
 | `POST /api/bookings` | `reservaCreada` | actualiza la vista de disponibilidad |
 | `POST /api/bookings/:bid/services/:sid` | `reservaActualizada` | actualiza la vista de disponibilidad |
+| Cualquiera de las anteriores | `actividadRegistrada` | suma la novedad al panel de actividad |
 
 En el controller, después de que la operación salió bien:
 
@@ -624,7 +630,38 @@ socket.on("servicioCreado", (servicio) => {
 });
 ```
 
+### Del cliente al servidor
+
+Los eventos anteriores viajan en una sola dirección: el servidor avisa, el navegador escucha. El panel de actividad usa la dirección contraria — el navegador manda una nota, y el servidor la recibe, la guarda y la difunde a todos los paneles abiertos.
+
+```js
+// public/js/socket.js — el navegador envía
+socket.emit("nuevaNota", { user, message });
+```
+
+```js
+// src/sockets/index.js — el servidor recibe, valida y difunde
+socket.on("nuevaNota", async ({ user, message }) => {
+  const nota = await messagesService.createMessage({ user, message });
+
+  if (!nota) {
+    //el dato no paso la validacion: se le avisa solo a quien la envio
+    socket.emit("notaRechazada", {
+      error: "El usuario y el mensaje son obligatorios",
+    });
+    return;
+  }
+
+  io.emit("actividadRegistrada", nota);
+});
+```
+
+La diferencia entre `socket.emit` e `io.emit` importa: el primero le responde solo a quien envió el mensaje, el segundo le habla a todos los clientes conectados.
+
+Dos decisiones de esa parte. Los handlers viven en `src/sockets/index.js` y no en `server.js`, que se queda únicamente con levantar el servidor. Y el handler usa el service de messages, la misma capa que usa la API: la nota se persiste en MongoDB atravesando la arquitectura de siempre, no por un atajo.
+
 ### Cómo verificarlo
+
 
 1. Levantar el servidor con `pnpm start`
 2. Abrir `http://localhost:8080/views/services` en el navegador
@@ -635,6 +672,8 @@ curl -X POST http://localhost:8080/api/services   -H "Content-Type: application/
 ```
 
 La fila nueva aparece en la tabla y el contador sube, sin tocar el navegador. Lo mismo al dar de baja un servicio: la fila cambia a "no disponible" en el momento.
+
+Para probar la dirección contraria, abrir `http://localhost:8080/views/activity`, escribir una nota y publicarla: se guarda en la colección `messages` y aparece en todos los paneles abiertos. Ahí también se registran solas las novedades del sistema, como la creación de un servicio o de una reserva.
 
 ## Cómo probar
 

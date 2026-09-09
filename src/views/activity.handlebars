@@ -1,0 +1,29 @@
+<section class="cabecera">
+  <h2>Actividad del sistema</h2>
+  <p class="contador">Novedades registradas y notas del equipo</p>
+</section>
+
+<form id="formNota" class="formulario">
+  <input type="text" id="usuario" placeholder="Tu nombre" maxlength="40" required />
+  <input type="text" id="nota" placeholder="Dejar una nota para el equipo" maxlength="500" required />
+  <button type="submit">Publicar</button>
+</form>
+
+<p id="errorNota" class="error" hidden></p>
+
+<p class="aviso">
+  Las novedades se registran solas cuando se crea un servicio o una reserva desde la API,
+  y aparecen acá en el momento sin recargar.
+</p>
+
+<ul id="listaActividad" class="actividad">
+  {{#each messages}}
+    <li>
+      <span class="autor">{{this.user}}</span>
+      <span class="texto">{{this.message}}</span>
+      <span class="momento">{{this.momento}}</span>
+    </li>
+  {{else}}
+    <li class="vacio">Todavía no hay actividad registrada.</li>
+  {{/each}}
+</ul>

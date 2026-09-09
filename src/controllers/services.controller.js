@@ -1,4 +1,5 @@
 import * as servicesService from "../services/services.service.js";
+import { registrarActividad } from "../sockets/index.js";
 
 export const getServices = async (req, res) => {
   const { category, available } = req.query;
@@ -29,8 +30,10 @@ export const createService = async (req, res) => {
   try {
     const newService = await servicesService.createService(serviceData);
     if (newService) {
+      const io = req.app.get("io");
       //avisa a las vistas abiertas para que agreguen la fila sin recargar
-      req.app.get("io")?.emit("servicioCreado", newService);
+      io?.emit("servicioCreado", newService);
+      registrarActividad(io, "sistema", `Se creo el servicio ${newService.name}`);
       res.status(201).json(newService);
     } else {
       res
@@ -66,8 +69,9 @@ export const deleteService = async (req, res) => {
   try {
     const deletedService = await servicesService.deleteService(serviceId);
     if (deletedService) {
-      //la baja logica tambien cambia la vista: el servicio pasa a no disponible
-      req.app.get("io")?.emit("servicioActualizado", deletedService);
+      const io = req.app.get("io");
+      io?.emit("servicioActualizado", deletedService);
+      registrarActividad(io, "sistema", `Se dio de baja el servicio ${deletedService.name}`);
       res.status(200).json(deletedService);
     } else {
       res.status(404).json({ error: "No se encontró el servicio" });

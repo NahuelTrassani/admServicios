@@ -1,7 +1,11 @@
 import * as servicesService from "../services/services.service.js";
 import * as bookingsService from "../services/bookings.service.js";
+import * as messagesService from "../services/messages.service.js";
 
 //las vistas usan las mismas capas que la API: no consultan la base por su cuenta
+
+const formatearMomento = (fecha) =>
+  fecha ? new Date(fecha).toLocaleString("es-AR") : "";
 
 const formatearFecha = (fecha) =>
   fecha ? new Date(fecha).toLocaleDateString("es-AR") : "sin fecha";
@@ -45,6 +49,25 @@ export const renderAvailability = async (req, res) => {
       total: 0,
       disponibles: 0,
       error: "No se pudo cargar la disponibilidad",
+    });
+  }
+};
+
+export const renderActivity = async (req, res) => {
+  try {
+    const messages = await messagesService.getLatestMessages();
+    res.render("activity", {
+      title: "Actividad",
+      messages: messages.map((m) => ({
+        ...m.toObject(),
+        momento: formatearMomento(m.createdAt),
+      })),
+    });
+  } catch (error) {
+    res.status(500).render("activity", {
+      title: "Actividad",
+      messages: [],
+      error: "No se pudo cargar la actividad",
     });
   }
 };

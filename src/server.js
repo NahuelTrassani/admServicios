@@ -3,6 +3,7 @@ import { Server } from "socket.io";
 import app from "./app.js";
 import config from "./config/env.config.js";
 import { connectDB } from "./config/db.config.js";
+import { registrarSockets } from "./sockets/index.js";
 
 await connectDB();
 
@@ -14,13 +15,7 @@ const io = new Server(httpServer);
 //sin importar socket.io desde las capas internas
 app.set("io", io);
 
-io.on("connection", (socket) => {
-  console.log(`Cliente conectado: ${socket.id}`);
-
-  socket.on("disconnect", () => {
-    console.log(`Cliente desconectado: ${socket.id}`);
-  });
-});
+registrarSockets(io);
 
 httpServer.listen(config.port, () => {
   console.log(

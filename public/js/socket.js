@@ -60,3 +60,47 @@ socket.on("reservaCreada", () => {
 socket.on("reservaActualizada", () => {
   if (totalReservas) window.location.reload();
 });
+
+// ---- panel de actividad ----
+
+const listaActividad = document.getElementById("listaActividad");
+const formNota = document.getElementById("formNota");
+const errorNota = document.getElementById("errorNota");
+
+const itemDeActividad = ({ user, message, createdAt }) => {
+  const item = document.createElement("li");
+  item.classList.add("nuevo");
+  item.innerHTML = `
+    <span class="autor">${user}</span>
+    <span class="texto">${message}</span>
+    <span class="momento">${new Date(createdAt).toLocaleString("es-AR")}</span>
+  `;
+  return item;
+};
+
+//el cliente le manda la nota al servidor: aca el socket va en la direccion contraria
+formNota?.addEventListener("submit", (evento) => {
+  evento.preventDefault();
+
+  const user = document.getElementById("usuario").value.trim();
+  const message = document.getElementById("nota").value.trim();
+
+  socket.emit("nuevaNota", { user, message });
+  document.getElementById("nota").value = "";
+});
+
+//el servidor confirma y difunde a todos los paneles abiertos
+socket.on("actividadRegistrada", (nota) => {
+  if (!listaActividad) return;
+
+  listaActividad.querySelector(".vacio")?.remove();
+  listaActividad.prepend(itemDeActividad(nota));
+  if (errorNota) errorNota.hidden = true;
+});
+
+//solo le llega a quien intento publicar
+socket.on("notaRechazada", ({ error }) => {
+  if (!errorNota) return;
+  errorNota.textContent = error;
+  errorNota.hidden = false;
+});

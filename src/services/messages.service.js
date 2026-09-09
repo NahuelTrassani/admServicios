@@ -5,6 +5,12 @@ export const getMessages = async () => {
   return messagesRepository.getAll();
 };
 
+//las novedades se muestran de la mas reciente a la mas vieja
+export const getLatestMessages = async (limite = 20) => {
+  const messages = await messagesRepository.getAll();
+  return messages.slice(-limite).reverse();
+};
+
 export const getMessageById = async (id) => {
   return messagesRepository.getById(id);
 };

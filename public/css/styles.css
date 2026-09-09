@@ -186,3 +186,87 @@ main {
 .actualizado td {
   animation: aparecer 1.6s ease-out;
 }
+
+.formulario {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.formulario input {
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.formulario input:first-child {
+  width: 180px;
+}
+
+.formulario input:nth-child(2) {
+  flex: 1;
+}
+
+.formulario button {
+  padding: 0.5rem 1.1rem;
+  border: none;
+  border-radius: 4px;
+  background: var(--acento);
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.formulario button:hover {
+  filter: brightness(1.1);
+}
+
+.error {
+  color: var(--alerta);
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
+}
+
+.actividad {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.actividad li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--borde);
+  font-size: 0.9rem;
+}
+
+.actividad li:last-child {
+  border-bottom: none;
+}
+
+.actividad .autor {
+  font-weight: 600;
+  min-width: 90px;
+}
+
+.actividad .texto {
+  flex: 1;
+}
+
+.actividad .momento {
+  color: var(--suave);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.actividad li.nuevo {
+  animation: aparecer 1.6s ease-out;
+}

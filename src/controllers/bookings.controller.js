@@ -1,12 +1,15 @@
 import * as servicesService from "../services/services.service.js";
 import * as bookingService from "../services/bookings.service.js";
+import { registrarActividad } from "../sockets/index.js";
 
 export const createBooking = async (req, res) => {
   const bookingData = req.body;
   try {
     const newBooking = await bookingService.createBooking(bookingData);
     if (newBooking) {
-      req.app.get("io")?.emit("reservaCreada", newBooking);
+      const io = req.app.get("io");
+      io?.emit("reservaCreada", newBooking);
+      registrarActividad(io, "sistema", `Nueva reserva de ${newBooking.clientName}`);
       res.status(201).json(newBooking);
     } else {
       res
