@@ -6,6 +6,7 @@ export const createBooking = async (req, res) => {
   try {
     const newBooking = await bookingService.createBooking(bookingData);
     if (newBooking) {
+      req.app.get("io")?.emit("reservaCreada", newBooking);
       res.status(201).json(newBooking);
     } else {
       res
@@ -50,6 +51,8 @@ export const addServiceToBooking = async (req, res) => {
       bookingId,
       serviceId,
     );
+    //la vista de disponibilidad muestra los servicios de cada reserva
+    req.app.get("io")?.emit("reservaActualizada", updatedBooking);
     res.status(200).json(updatedBooking);
   } catch (error) {
     res

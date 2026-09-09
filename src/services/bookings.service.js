@@ -6,6 +6,11 @@ export const getBookings = async () => {
   return bookingsRepository.getAll();
 };
 
+//devuelve las reservas con los datos del servicio resueltos, para mostrarlas en las vistas
+export const getBookingsWithServices = async () => {
+  return bookingsRepository.getAllPopulated();
+};
+
 export const getBookingById = async (id) => {
   return bookingsRepository.getById(id);
 };

@@ -4,7 +4,9 @@ Pre-entrega 7 del curso Programación Backend I (CoderHouse).
 
 API REST construida con Express que expone tres recursos: `services` (los servicios que pueden reservarse), `bookings` (las reservas de los clientes) y `messages` (mensajes del sistema), con persistencia en **MongoDB Atlas** mediante Mongoose.
 
-El proyecto está organizado en cinco capas —router, controller, service, repository y DAO— cada una con una responsabilidad única y sin conocer más que la siguiente.
+Además de la API, el proyecto sirve vistas renderizadas en el servidor con Handlebars y actualiza esas vistas en tiempo real con Socket.io.
+
+Está organizado en cinco capas —router, controller, service, repository y DAO— cada una con una responsabilidad única y sin conocer más que la siguiente.
 
 ## Nota sobre el DELETE de servicios
 
@@ -80,6 +82,8 @@ Una petición atraviesa cinco capas antes de llegar a los datos. Cada una tiene 
 ```
 cliente  ->  router  ->  controller  ->  service  ->  repository  ->  DAO  ->  MongoDB
 ```
+
+Las vistas usan exactamente la misma cadena: `views.controller.js` le pide los datos a los services, igual que los controllers de la API.
 
 ### Router
 
@@ -192,10 +196,12 @@ src/
     services.router.js          endpoints de services
     bookings.router.js          endpoints de bookings
     messages.router.js          endpoints de messages
+    views.router.js             rutas de las vistas
   controllers/
     services.controller.js      request/response de services
     bookings.controller.js      request/response de bookings
     messages.controller.js      request/response de messages
+    views.controller.js         render de las vistas
   services/
     services.service.js         reglas de negocio de services
     bookings.service.js         reglas de negocio de bookings
@@ -212,10 +218,19 @@ src/
     service.model.js            schema y model de servicios
     booking.model.js            schema y model de reservas
     message.model.js            schema y model de mensajes
+  views/
+    layouts/main.handlebars     estructura común de todas las páginas
+    services.handlebars         listado de servicios
+    availability.handlebars     reservas y disponibilidad
   utils/
     errors.js                   distingue errores de validación de fallas reales
-  app.js                        configuración de Express y montaje de routers
-  server.js                     levanta el servidor
+  app.js                        configuración de Express, Handlebars y routers
+  server.js                     levanta el servidor HTTP y Socket.io
+public/
+  css/styles.css                estilos de las vistas
+  js/socket.js                  cliente de Socket.io
+tests/                          tests con Vitest
+postman/                        colección de pruebas de la API
 ```
 
 ### Correspondencia entre capas
@@ -231,6 +246,8 @@ src/
 | `GET /api/bookings/:bid` | `getBookingById` | `getById` |
 | `POST /api/bookings/:bid/services/:sid` | `addServiceToBooking` | `getById` + `update` |
 | `GET /api/messages` | `getMessages` | `getAll` |
+| `GET /views/services` | `renderServices` | `getAll` |
+| `GET /views/availability` | `renderAvailability` | `getAllPopulated` |
 | `GET /api/messages/:mid` | `getMessageById` | `getById` |
 | `POST /api/messages` | `createMessage` | `create` |
 
@@ -527,6 +544,97 @@ Content-Type: application/json
 ```
 
 Los dos campos son obligatorios y el mensaje no puede superar los 500 caracteres. Si falta alguno o se excede el límite, responde `400`.
+
+## Vistas
+
+Además de la API, el proyecto renderiza dos páginas en el servidor con **Handlebars**.
+
+| Ruta | Qué muestra |
+|---|---|
+| `/views/services` | Listado de servicios con nombre, descripción, duración, precio, categoría y disponibilidad |
+| `/views/availability` | Reservas con sus servicios asociados, y el total de servicios disponibles |
+
+Las dos toman los datos de MongoDB pasando por las mismas capas que la API: el controller de vistas llama a los services, no consulta la base por su cuenta.
+
+```js
+// src/controllers/views.controller.js
+const services = await servicesService.getServices(req.query);
+res.render("services", { title: "Servicios", services: services.map((s) => s.toObject()) });
+```
+
+El `.toObject()` es necesario porque Handlebars no puede leer documentos de Mongoose directamente: hay que convertirlos a objetos planos o los campos salen vacíos.
+
+### El populate en la vista de disponibilidad
+
+Cada reserva guarda solo el `ObjectId` del servicio, pero la vista muestra su nombre. Esa referencia se resuelve con `populate`:
+
+```js
+// src/dao/bookings.dao.js
+async getAllPopulated() {
+  return Booking.find().populate("services.service");
+}
+```
+
+Va en un método **aparte** de `getAll` a propósito: si estuviera dentro, la API REST empezaría a devolver el servicio completo dentro de cada reserva y se rompería el requisito de guardar solo la referencia.
+
+## Tiempo real con Socket.io
+
+Cuando alguien modifica algo por la API, las vistas abiertas se actualizan **sin recargar la página**.
+
+### Cómo está montado
+
+Socket.io necesita el servidor HTTP, no alcanza con la app de Express. Por eso `server.js` lo crea explícitamente:
+
+```js
+const httpServer = createServer(app);
+const io = new Server(httpServer);
+
+//se guarda en la app para que los controllers puedan emitir con req.app.get("io")
+app.set("io", io);
+
+httpServer.listen(config.port, ...);
+```
+
+Guardar la instancia en la app permite emitir desde los controllers sin que las capas internas conozcan Socket.io: el service y el DAO siguen sin saber que existe.
+
+### Los eventos
+
+Cada evento responde a una acción concreta del sistema, no a la conexión de un usuario:
+
+| Acción | Evento emitido | Efecto en la vista |
+|---|---|---|
+| `POST /api/services` | `servicioCreado` | agrega la fila al listado |
+| `PUT /api/services/:sid` | `servicioActualizado` | reemplaza la fila |
+| `DELETE /api/services/:sid` | `servicioActualizado` | la fila pasa a "no disponible" |
+| `POST /api/bookings` | `reservaCreada` | actualiza la vista de disponibilidad |
+| `POST /api/bookings/:bid/services/:sid` | `reservaActualizada` | actualiza la vista de disponibilidad |
+
+En el controller, después de que la operación salió bien:
+
+```js
+req.app.get("io")?.emit("servicioCreado", newService);
+```
+
+Y en el cliente:
+
+```js
+// public/js/socket.js
+socket.on("servicioCreado", (servicio) => {
+  lista.appendChild(filaDeServicio(servicio));
+});
+```
+
+### Cómo verificarlo
+
+1. Levantar el servidor con `pnpm start`
+2. Abrir `http://localhost:8080/views/services` en el navegador
+3. Sin cerrar esa pestaña, crear un servicio desde Postman o con curl:
+
+```bash
+curl -X POST http://localhost:8080/api/services   -H "Content-Type: application/json"   -d '{"name":"Cerrajeria","description":"Apertura de cerraduras","duration":45,"price":21000,"category":"cerrajeria","available":true}'
+```
+
+La fila nueva aparece en la tabla y el contador sube, sin tocar el navegador. Lo mismo al dar de baja un servicio: la fila cambia a "no disponible" en el momento.
 
 ## Cómo probar
 

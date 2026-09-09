@@ -1,0 +1,39 @@
+<section class="cabecera">
+  <h2>Disponibilidad y reservas</h2>
+  <p class="contador">
+    <span id="totalReservas">{{bookings.length}}</span> reservas ·
+    {{disponibles}} de {{total}} servicios disponibles
+  </p>
+</section>
+
+<p class="aviso">
+  Esta vista se actualiza sola: si se agrega un servicio a una reserva desde la API, el cambio aparece acá sin recargar.
+</p>
+
+<div id="listaReservas">
+  {{#each bookings}}
+    <article class="reserva" data-id="{{this._id}}">
+      <header>
+        <h3>{{this.clientName}}</h3>
+        <span class="estado {{this.status}}">{{this.status}}</span>
+      </header>
+      <p class="dato">{{this.clientEmail}}</p>
+      <p class="dato">{{this.fecha}} a las {{this.time}}</p>
+
+      {{#if this.services.length}}
+        <ul class="servicios">
+          {{#each this.services}}
+            <li>
+              {{this.service.name}}
+              <span class="cantidad">x{{this.quantity}}</span>
+            </li>
+          {{/each}}
+        </ul>
+      {{else}}
+        <p class="sin-servicios">Sin servicios asociados.</p>
+      {{/if}}
+    </article>
+  {{else}}
+    <p class="vacio">Todavía no hay reservas cargadas.</p>
+  {{/each}}
+</div>

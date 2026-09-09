@@ -29,6 +29,8 @@ export const createService = async (req, res) => {
   try {
     const newService = await servicesService.createService(serviceData);
     if (newService) {
+      //avisa a las vistas abiertas para que agreguen la fila sin recargar
+      req.app.get("io")?.emit("servicioCreado", newService);
       res.status(201).json(newService);
     } else {
       res
@@ -49,6 +51,7 @@ export const updateService = async (req, res) => {
       serviceData,
     );
     if (newService) {
+      req.app.get("io")?.emit("servicioActualizado", newService);
       res.status(200).json(newService);
     } else {
       res.status(404).json({ error: "No se encontró el servicio" });
@@ -63,6 +66,8 @@ export const deleteService = async (req, res) => {
   try {
     const deletedService = await servicesService.deleteService(serviceId);
     if (deletedService) {
+      //la baja logica tambien cambia la vista: el servicio pasa a no disponible
+      req.app.get("io")?.emit("servicioActualizado", deletedService);
       res.status(200).json(deletedService);
     } else {
       res.status(404).json({ error: "No se encontró el servicio" });

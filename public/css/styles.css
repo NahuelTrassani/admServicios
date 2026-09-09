@@ -1,0 +1,188 @@
+:root {
+  --fondo: #f4f5f7;
+  --panel: #ffffff;
+  --borde: #dfe3e8;
+  --texto: #1f2933;
+  --suave: #6b7684;
+  --acento: #2f6f4e;
+  --alerta: #a4453b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--fondo);
+  color: var(--texto);
+  line-height: 1.5;
+}
+
+header {
+  background: var(--panel);
+  border-bottom: 1px solid var(--borde);
+  padding: 1.25rem 2rem;
+}
+
+header h1 {
+  margin: 0 0 0.75rem;
+  font-size: 1.25rem;
+}
+
+nav a {
+  color: var(--suave);
+  text-decoration: none;
+  margin-right: 1.25rem;
+  font-size: 0.95rem;
+}
+
+nav a:hover {
+  color: var(--acento);
+}
+
+main {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.cabecera h2 {
+  margin: 0 0 0.25rem;
+}
+
+.contador {
+  margin: 0;
+  color: var(--suave);
+  font-size: 0.9rem;
+}
+
+.aviso {
+  background: #eef4f0;
+  border-left: 3px solid var(--acento);
+  padding: 0.65rem 1rem;
+  margin: 1.5rem 0;
+  font-size: 0.88rem;
+  color: var(--suave);
+}
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.tabla th,
+.tabla td {
+  padding: 0.7rem 0.9rem;
+  text-align: left;
+  border-bottom: 1px solid var(--borde);
+  font-size: 0.9rem;
+}
+
+.tabla th {
+  background: #fafbfc;
+  font-weight: 600;
+  color: var(--suave);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tabla tr:last-child td {
+  border-bottom: none;
+}
+
+.estado {
+  font-size: 0.8rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.estado.si,
+.estado.confirmada {
+  background: #e3f0e8;
+  color: var(--acento);
+}
+
+.estado.no,
+.estado.cancelada {
+  background: #f6e5e3;
+  color: var(--alerta);
+}
+
+.estado.pendiente {
+  background: #fdf1dc;
+  color: #8a6116;
+}
+
+.reserva {
+  background: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+
+.reserva header {
+  background: none;
+  border: none;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.reserva h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.dato {
+  margin: 0.2rem 0;
+  color: var(--suave);
+  font-size: 0.88rem;
+}
+
+.servicios {
+  margin: 0.75rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+
+.servicios li {
+  margin-bottom: 0.2rem;
+}
+
+.cantidad {
+  color: var(--suave);
+  font-size: 0.82rem;
+}
+
+.sin-servicios,
+.vacio {
+  color: var(--suave);
+  font-size: 0.88rem;
+  font-style: italic;
+}
+
+/* resaltado momentaneo cuando llega un cambio por socket */
+@keyframes aparecer {
+  from {
+    background: #e3f0e8;
+  }
+  to {
+    background: transparent;
+  }
+}
+
+.nuevo td,
+.actualizado td {
+  animation: aparecer 1.6s ease-out;
+}

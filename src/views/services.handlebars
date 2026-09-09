@@ -1,0 +1,43 @@
+<section class="cabecera">
+  <h2>Servicios</h2>
+  <p class="contador"><span id="total">{{services.length}}</span> servicios en el catálogo</p>
+</section>
+
+<p class="aviso">
+  Esta vista se actualiza sola: si se crea un servicio desde la API, aparece acá sin recargar.
+</p>
+
+<table class="tabla">
+  <thead>
+    <tr>
+      <th>Nombre</th>
+      <th>Descripción</th>
+      <th>Duración</th>
+      <th>Precio</th>
+      <th>Categoría</th>
+      <th>Disponible</th>
+    </tr>
+  </thead>
+  <tbody id="listaServicios">
+    {{#each services}}
+      <tr data-id="{{this._id}}">
+        <td>{{this.name}}</td>
+        <td>{{this.description}}</td>
+        <td>{{this.duration}} min</td>
+        <td>${{this.price}}</td>
+        <td>{{this.category}}</td>
+        <td>
+          {{#if this.available}}
+            <span class="estado si">disponible</span>
+          {{else}}
+            <span class="estado no">no disponible</span>
+          {{/if}}
+        </td>
+      </tr>
+    {{else}}
+      <tr class="vacio">
+        <td colspan="6">Todavía no hay servicios cargados.</td>
+      </tr>
+    {{/each}}
+  </tbody>
+</table>

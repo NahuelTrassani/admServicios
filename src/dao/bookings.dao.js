@@ -6,6 +6,12 @@ class BookingsDao {
     return Booking.find();
   }
 
+  //populate resuelve la referencia y trae el servicio completo en vez del ObjectId.
+  //va aparte de getAll para no cambiar lo que devuelve la API REST
+  async getAllPopulated() {
+    return Booking.find().populate("services.service");
+  }
+
   async getById(id) {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return null;
