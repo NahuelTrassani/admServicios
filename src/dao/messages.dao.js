@@ -6,6 +6,11 @@ class MessagesDao {
     return Message.find();
   }
 
+  //el orden y el corte los resuelve mongo, no se traen todos los documentos
+  async getLatest(limite) {
+    return Message.find().sort({ createdAt: -1 }).limit(limite);
+  }
+
   async getById(id) {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return null;

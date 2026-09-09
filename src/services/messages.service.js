@@ -7,8 +7,7 @@ export const getMessages = async () => {
 
 //las novedades se muestran de la mas reciente a la mas vieja
 export const getLatestMessages = async (limite = 20) => {
-  const messages = await messagesRepository.getAll();
-  return messages.slice(-limite).reverse();
+  return messagesRepository.getLatest(limite);
 };
 
 export const getMessageById = async (id) => {

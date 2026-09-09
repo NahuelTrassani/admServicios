@@ -9,6 +9,10 @@ class MessagesRepository {
     return this.dao.getAll();
   }
 
+  async getLatest(limite) {
+    return this.dao.getLatest(limite);
+  }
+
   async getById(id) {
     return this.dao.getById(id);
   }
