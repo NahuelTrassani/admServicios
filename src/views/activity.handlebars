@@ -18,7 +18,7 @@
 
 <ul id="listaActividad" class="actividad">
   {{#each messages}}
-    <li>
+    <li data-id="{{this._id}}">
       <span class="autor">{{this.user}}</span>
       <span class="texto">{{this.message}}</span>
       <span class="momento">{{this.momento}}</span>

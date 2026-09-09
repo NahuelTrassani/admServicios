@@ -178,8 +178,21 @@ Arriba se habla en términos del negocio; abajo, en términos de datos. Por eso 
 |---|---|
 | `deleteService` — dar de baja un servicio | `update` con `available: false` |
 | `addServiceToBooking` — agregar un servicio a una reserva | `update` del array `services` |
+| `deleteMessage` — borrar una nota | `delete` real, sin baja lógica |
 
 En los dos casos, la decisión de *qué significa* la operación vive en el service. El DAO solo ejecuta una escritura: no sabe qué es una baja lógica ni qué es una cantidad.
+
+### Por qué services usa baja lógica y messages no
+
+Los dos recursos exponen un `DELETE`, pero se resuelven distinto a propósito:
+
+| Recurso | Qué hace el DELETE | Por qué |
+|---|---|---|
+| `services` | marca `available: false` | Las reservas guardan el `ObjectId` del servicio. Un borrado físico dejaría esas reservas apuntando a un documento que ya no existe |
+| `messages` | borra el documento | Ningún documento referencia un mensaje, así que no hay integridad que preservar |
+
+Es la misma operación desde afuera y dos decisiones distintas adentro, cada una atada a las relaciones del dato.
+
 
 ### Qué gana el proyecto con esto
 
@@ -249,6 +262,8 @@ postman/                        colección de pruebas de la API
 | `GET /api/bookings/:bid` | `getBookingById` | `getById` |
 | `POST /api/bookings/:bid/services/:sid` | `addServiceToBooking` | `getById` + `update` |
 | `GET /api/messages` | `getMessages` | `getAll` |
+| `PUT /api/messages/:mid` | `updateMessage` | `update` |
+| `DELETE /api/messages/:mid` | `deleteMessage` | `delete` |
 | `GET /views/services` | `renderServices` | `getAll` |
 | `GET /views/availability` | `renderAvailability` | `getAllPopulated` |
 | `GET /views/activity` | `renderActivity` | `getAll` |
@@ -534,6 +549,8 @@ Todas las rutas cuelgan de `/api/messages`.
 | GET | `/api/messages` | Lista los mensajes | 200 |
 | GET | `/api/messages/:mid` | Devuelve un mensaje por id | 200 / 404 |
 | POST | `/api/messages` | Crea un mensaje | 201 / 400 |
+| PUT | `/api/messages/:mid` | Edita un mensaje | 200 / 404 |
+| DELETE | `/api/messages/:mid` | Elimina un mensaje | 200 / 404 |
 
 ### POST /api/messages
 
@@ -706,6 +723,10 @@ Casos cubiertos:
 | services | Actualizar uno inexistente | 404 |
 | services | Dar de baja | 200, queda con `available: false` |
 | services | Verificar que el documento sigue en la colección | 200 |
+| messages | Crear, consultar, editar y eliminar | 201 / 200 / 404 |
+| messages | Verificar que el borrado es físico | 404 tras el DELETE |
+| vistas | Las tres rutas de `/views` | 200 con HTML y datos reales |
+| vistas | Archivos estáticos y cliente de Socket.io | 200 |
 | services | Dar de baja uno inexistente | 404 |
 | bookings | Crear reserva | 201, con `services` vacío |
 | bookings | Crear con un campo faltante o sin body | 400 |
@@ -733,8 +754,11 @@ Los archivos están en `tests/`:
 |---|---|
 | `services.service.test.js` | filtros del listado, validaciones de creación, baja lógica |
 | `bookings.service.test.js` | creación, y la regla de incrementar `quantity` sin duplicar |
-| `messages.service.test.js` | creación y consulta de mensajes |
+| `messages.service.test.js` | creación, consulta, edición y borrado de mensajes |
 | `models.test.js` | las validaciones de los tres schemas |
+| `services.controller.test.js` | códigos HTTP y emisión de eventos |
+| `views.controller.test.js` | render de las vistas y conversión de documentos |
+| `sockets.test.js` | recepción de notas, validación y difusión |
 
 **Cómo se prueban los services sin tocar la base.** El repository se reemplaza por un doble que devuelve lo que cada test necesita, así el service se prueba aislado:
 

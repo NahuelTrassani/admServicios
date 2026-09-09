@@ -67,8 +67,9 @@ const listaActividad = document.getElementById("listaActividad");
 const formNota = document.getElementById("formNota");
 const errorNota = document.getElementById("errorNota");
 
-const itemDeActividad = ({ user, message, createdAt }) => {
+const itemDeActividad = ({ _id, user, message, createdAt }) => {
   const item = document.createElement("li");
+  item.dataset.id = _id;
   item.classList.add("nuevo");
   item.innerHTML = `
     <span class="autor">${user}</span>
@@ -103,4 +104,20 @@ socket.on("notaRechazada", ({ error }) => {
   if (!errorNota) return;
   errorNota.textContent = error;
   errorNota.hidden = false;
+});
+
+//una nota editada o borrada desde la API tambien se refleja en el panel
+socket.on("actividadEditada", (nota) => {
+  if (!listaActividad) return;
+
+  const items = [...listaActividad.querySelectorAll("li")];
+  const item = items.find((li) => li.dataset.id === nota._id);
+  if (item) item.replaceWith(itemDeActividad(nota));
+});
+
+socket.on("actividadEliminada", (nota) => {
+  if (!listaActividad) return;
+
+  const items = [...listaActividad.querySelectorAll("li")];
+  items.find((li) => li.dataset.id === nota._id)?.remove();
 });

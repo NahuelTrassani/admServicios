@@ -28,6 +28,14 @@ class MessagesDao {
     }
     return Message.findByIdAndUpdate(id, data, { returnDocument: "after" });
   }
+
+  //los mensajes no los referencia nadie, asi que el borrado es fisico
+  async delete(id) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
+    return Message.findByIdAndDelete(id);
+  }
 }
 
 export default new MessagesDao();

@@ -24,6 +24,10 @@ class MessagesRepository {
   async update(id, data) {
     return this.dao.update(id, data);
   }
+
+  async delete(id) {
+    return this.dao.delete(id);
+  }
 }
 
 export default new MessagesRepository(messagesDao);
