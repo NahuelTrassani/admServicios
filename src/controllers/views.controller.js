@@ -1,6 +1,7 @@
 import * as servicesService from "../services/services.service.js";
 import * as bookingsService from "../services/bookings.service.js";
 import * as messagesService from "../services/messages.service.js";
+import { listServicesQuerySchema } from "../validations/service.validation.js";
 
 //las vistas usan las mismas capas que la API: no consultan la base por su cuenta
 
@@ -12,10 +13,23 @@ const formatearFecha = (fecha) =>
 
 export const renderServices = async (req, res) => {
   try {
-    const services = await servicesService.getServices(req.query);
+    //la vista usa la misma consulta paginada que la API, con un limite mas alto
+    const criterios = listServicesQuerySchema.parse({ limit: "50", ...req.query });
+    const resultado = await servicesService.searchServices(criterios);
+
     res.render("services", {
       title: "Servicios",
-      services: services.map((s) => s.toObject()),
+      services: resultado.services.map((s) => s.toObject()),
+      paginacion: {
+        total: resultado.total,
+        limit: resultado.limit,
+        page: resultado.page,
+        totalPages: resultado.totalPages,
+        hasPrevPage: resultado.hasPrevPage,
+        hasNextPage: resultado.hasNextPage,
+        prevPage: resultado.prevPage,
+        nextPage: resultado.nextPage,
+      },
     });
   } catch (error) {
     res.status(500).render("services", {
@@ -28,9 +42,10 @@ export const renderServices = async (req, res) => {
 
 export const renderAvailability = async (req, res) => {
   try {
-    const [bookings, services] = await Promise.all([
+    const [bookings, total, disponibles] = await Promise.all([
       bookingsService.getBookingsWithServices(),
-      servicesService.getServices(),
+      servicesService.countServices(),
+      servicesService.countServices({ available: true }),
     ]);
 
     res.render("availability", {
@@ -39,8 +54,8 @@ export const renderAvailability = async (req, res) => {
         ...b.toObject(),
         fecha: formatearFecha(b.date),
       })),
-      total: services.length,
-      disponibles: services.filter((s) => s.available).length,
+      total,
+      disponibles,
     });
   } catch (error) {
     res.status(500).render("availability", {

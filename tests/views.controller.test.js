@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../src/services/services.service.js", () => ({
-  getServices: vi.fn(),
+  searchServices: vi.fn(),
+  countServices: vi.fn(),
 }));
 
 vi.mock("../src/services/bookings.service.js", () => ({
@@ -29,33 +30,89 @@ const armarReq = (query = {}) => ({ query });
 //los documentos de mongoose se pasan a objeto plano antes de llegar a handlebars
 const documento = (datos) => ({ ...datos, toObject: () => datos });
 
+const paginado = (services = []) => ({
+  services,
+  total: services.length,
+  page: 1,
+  limit: 50,
+  totalPages: 1,
+  hasPrevPage: false,
+  hasNextPage: false,
+  prevPage: null,
+  nextPage: null,
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 describe("renderServices", () => {
   it("renderiza la vista con los servicios convertidos a objeto plano", async () => {
-    servicesService.getServices.mockResolvedValue([
-      documento({ _id: "s1", name: "Mecánica" }),
-    ]);
+    servicesService.searchServices.mockResolvedValue(
+      paginado([documento({ _id: "s1", name: "Mecánica" })]),
+    );
     const res = armarRes();
 
     await controller.renderServices(armarReq(), res);
 
-    expect(res.render).toHaveBeenCalledWith("services", {
-      title: "Servicios",
-      services: [{ _id: "s1", name: "Mecánica" }],
+    const [vista, datos] = res.render.mock.calls[0];
+    expect(vista).toBe("services");
+    expect(datos.services).toEqual([{ _id: "s1", name: "Mecánica" }]);
+  });
+
+  it("manda a la vista los metadatos de paginacion", async () => {
+    servicesService.searchServices.mockResolvedValue(paginado());
+    const res = armarRes();
+
+    await controller.renderServices(armarReq(), res);
+
+    const [, datos] = res.render.mock.calls[0];
+    expect(datos.paginacion).toMatchObject({
+      total: 0,
+      limit: 50,
+      page: 1,
+      totalPages: 1,
+      hasPrevPage: false,
+      hasNextPage: false,
     });
   });
 
-  it("le pasa los filtros del query al service", async () => {
-    servicesService.getServices.mockResolvedValue([]);
+  it("valida el query con el mismo schema que la API y aplica los defaults", async () => {
+    servicesService.searchServices.mockResolvedValue(paginado());
+
     await controller.renderServices(armarReq({ category: "gas" }), armarRes());
-    expect(servicesService.getServices).toHaveBeenCalledWith({ category: "gas" });
+
+    expect(servicesService.searchServices).toHaveBeenCalledWith({
+      category: "gas",
+      page: 1,
+      limit: 50,
+      sortBy: "name",
+      order: "asc",
+    });
+  });
+
+  it("respeta el limit que llega por query en vez del default de la vista", async () => {
+    servicesService.searchServices.mockResolvedValue(paginado());
+
+    await controller.renderServices(armarReq({ limit: "5", page: "2" }), armarRes());
+
+    const criterios = servicesService.searchServices.mock.calls[0][0];
+    expect(criterios.limit).toBe(5);
+    expect(criterios.page).toBe(2);
+  });
+
+  it("renderiza la vista vacia y responde 500 si el query es invalido", async () => {
+    const res = armarRes();
+
+    //sortBy no esta en el enum: el parse tira y cae en el catch
+    await controller.renderServices(armarReq({ sortBy: "inventado" }), res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(servicesService.searchServices).not.toHaveBeenCalled();
   });
 
   it("renderiza la vista vacia y responde 500 si falla la consulta", async () => {
-    servicesService.getServices.mockRejectedValue(new Error("caida"));
+    servicesService.searchServices.mockRejectedValue(new Error("caida"));
     const res = armarRes();
 
     await controller.renderServices(armarReq(), res);
@@ -69,15 +126,13 @@ describe("renderServices", () => {
 });
 
 describe("renderAvailability", () => {
-  it("cuenta los servicios disponibles y formatea la fecha de cada reserva", async () => {
+  it("cuenta los servicios en la base y formatea la fecha de cada reserva", async () => {
     bookingsService.getBookingsWithServices.mockResolvedValue([
       documento({ _id: "b1", clientName: "Juan", date: "2026-09-15" }),
     ]);
-    servicesService.getServices.mockResolvedValue([
-      { available: true },
-      { available: false },
-      { available: true },
-    ]);
+    servicesService.countServices
+      .mockResolvedValueOnce(3)
+      .mockResolvedValueOnce(2);
     const res = armarRes();
 
     await controller.renderAvailability(armarReq(), res);
@@ -89,9 +144,19 @@ describe("renderAvailability", () => {
     expect(datos.bookings[0].fecha).toBeTypeOf("string");
   });
 
+  it("cuenta los disponibles con un filtro, no trayendo documentos", async () => {
+    bookingsService.getBookingsWithServices.mockResolvedValue([]);
+    servicesService.countServices.mockResolvedValue(0);
+
+    await controller.renderAvailability(armarReq(), armarRes());
+
+    expect(servicesService.countServices).toHaveBeenCalledWith();
+    expect(servicesService.countServices).toHaveBeenCalledWith({ available: true });
+  });
+
   it("usa la consulta con populate, no el listado comun", async () => {
     bookingsService.getBookingsWithServices.mockResolvedValue([]);
-    servicesService.getServices.mockResolvedValue([]);
+    servicesService.countServices.mockResolvedValue(0);
     await controller.renderAvailability(armarReq(), armarRes());
     expect(bookingsService.getBookingsWithServices).toHaveBeenCalled();
   });

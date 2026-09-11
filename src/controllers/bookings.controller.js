@@ -28,7 +28,8 @@ export const createBooking = async (req, res) => {
 export const getBookingById = async (req, res) => {
   const bookingId = req.params.bid;
   try {
-    const booking = await bookingService.getBookingById(bookingId);
+    //la consigna pide devolver los datos completos de cada servicio asociado
+    const booking = await bookingService.getBookingWithServices(bookingId);
     if (booking) {
       res.status(200).json(booking);
     } else {

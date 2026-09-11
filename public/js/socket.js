@@ -3,6 +3,19 @@ const socket = io();
 
 const lista = document.getElementById("listaServicios");
 const total = document.getElementById("total");
+const enPantalla = document.getElementById("enPantalla");
+const avisoNuevos = document.getElementById("avisoNuevos");
+
+//cuantos servicios nuevos entraron mientras se miraba una pagina donde no van
+let nuevosFuera = 0;
+
+const contarFilas = () => lista.querySelectorAll("tr[data-id]").length;
+
+//la fila nueva solo entra si esta pagina es la ultima y todavia tiene lugar.
+//en cualquier otra pagina el servicio pertenece a otro tramo del listado
+const entraEnEstaPagina = () =>
+  lista.dataset.ultimaPagina === "si" &&
+  contarFilas() < Number(lista.dataset.limit);
 const listaReservas = document.getElementById("listaReservas");
 const totalReservas = document.getElementById("totalReservas");
 
@@ -30,14 +43,27 @@ const filaDeServicio = (servicio) => {
 socket.on("servicioCreado", (servicio) => {
   if (!lista) return;
 
+  //el total de la coleccion sube siempre, este el servicio en esta pagina o no
+  if (total) total.textContent = Number(total.textContent) + 1;
+
+  if (!entraEnEstaPagina()) {
+    nuevosFuera += 1;
+    if (avisoNuevos) {
+      avisoNuevos.hidden = false;
+      avisoNuevos.textContent =
+        nuevosFuera === 1
+          ? "Se creó 1 servicio que entra en otra página del listado."
+          : `Se crearon ${nuevosFuera} servicios que entran en otras páginas del listado.`;
+    }
+    return;
+  }
+
   lista.querySelector(".vacio")?.remove();
   const fila = filaDeServicio(servicio);
   fila.classList.add("nuevo");
   lista.appendChild(fila);
 
-  if (total) {
-    total.textContent = lista.querySelectorAll("tr[data-id]").length;
-  }
+  if (enPantalla) enPantalla.textContent = contarFilas();
 });
 
 //se modifico o se dio de baja: se reemplaza la fila correspondiente

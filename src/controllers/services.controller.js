@@ -2,12 +2,12 @@ import * as servicesService from "../services/services.service.js";
 import { registrarActividad } from "../sockets/index.js";
 
 export const getServices = async (req, res) => {
-  const { category, available } = req.query;
   try {
-    const result = await servicesService.getServices({ category, available });
-    res.status(200).json(result); //devuelve 200 y el resultado
+    //req.consulta viene del middleware con los tipos convertidos y los defaults puestos
+    const resultado = await servicesService.searchServices(req.consulta);
+    res.status(200).json(resultado);
   } catch (error) {
-    res.status(500).json({ error: "Error al obtener los servicios" }); //error 500 y msj error.
+    res.status(500).json({ error: "Error al obtener los servicios" });
   }
 };
 

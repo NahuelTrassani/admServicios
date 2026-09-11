@@ -1,11 +1,17 @@
 <section class="cabecera">
   <h2>Servicios</h2>
-  <p class="contador"><span id="total">{{services.length}}</span> servicios en el catálogo</p>
+  <p class="contador">
+    <span id="enPantalla">{{services.length}}</span> de
+    <span id="total">{{paginacion.total}}</span> servicios
+    {{#if paginacion.totalPages}}· página {{paginacion.page}} de {{paginacion.totalPages}}{{/if}}
+  </p>
 </section>
 
 <p class="aviso">
-  Esta vista se actualiza sola: si se crea un servicio desde la API, aparece acá sin recargar.
+  Esta vista se actualiza sola: si se crea o se modifica un servicio desde la API, se ve acá sin recargar.
 </p>
+
+<p class="aviso pendiente" id="avisoNuevos" hidden></p>
 
 <table class="tabla">
   <thead>
@@ -18,7 +24,11 @@
       <th>Disponible</th>
     </tr>
   </thead>
-  <tbody id="listaServicios">
+  <tbody
+    id="listaServicios"
+    data-limit="{{paginacion.limit}}"
+    data-ultima-pagina="{{#if paginacion.hasNextPage}}no{{else}}si{{/if}}"
+  >
     {{#each services}}
       <tr data-id="{{this._id}}">
         <td>{{this.name}}</td>
@@ -41,3 +51,14 @@
     {{/each}}
   </tbody>
 </table>
+
+{{#if paginacion.totalPages}}
+  <nav class="paginacion">
+    {{#if paginacion.hasPrevPage}}
+      <a href="/views/services?page={{paginacion.prevPage}}">Anterior</a>
+    {{/if}}
+    {{#if paginacion.hasNextPage}}
+      <a href="/views/services?page={{paginacion.nextPage}}">Siguiente</a>
+    {{/if}}
+  </nav>
+{{/if}}

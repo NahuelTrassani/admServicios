@@ -228,9 +228,20 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
-                  "pm.test('devuelve un array', () => pm.expect(pm.response.json()).to.be.an('array'));",
+                  "pm.test('la respuesta trae el listado y los metadatos de paginacion', () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.services).to.be.an('array');",
+                  "  ['total', 'page', 'limit', 'totalPages', 'hasPrevPage', 'hasNextPage'].forEach(campo =>",
+                  "    pm.expect(r).to.have.property(campo));",
+                  "});",
                   "pm.test('los documentos vienen de mongo', () => {",
-                  "  pm.expect(pm.response.json()[0]).to.have.property('_id');",
+                  "  pm.expect(pm.response.json().services[0]).to.have.property('_id');",
+                  "});",
+                  "pm.test('sin query se aplican los defaults del schema', () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.page).to.eql(1);",
+                  "  pm.expect(r.limit).to.eql(10);",
+                  "  pm.expect(r.services.length).to.be.at.most(10);",
                   "});"
                 ]
               }
@@ -262,8 +273,12 @@
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
                   "pm.test('todos son de la categoria pedida', () => {",
                   "  const r = pm.response.json();",
-                  "  pm.expect(r.length).to.be.above(0);",
-                  "  r.forEach(s => pm.expect(s.category).to.eql('gas'));",
+                  "  pm.expect(r.services.length).to.be.above(0);",
+                  "  r.services.forEach(s => pm.expect(s.category).to.eql('gas'));",
+                  "});",
+                  "pm.test('el total refleja el filtro, no el catalogo completo', () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.total).to.be.at.least(r.services.length);",
                   "});"
                 ]
               }
@@ -300,7 +315,7 @@
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
                   "pm.test('todos estan disponibles', () => {",
-                  "  pm.response.json().forEach(s => pm.expect(s.available).to.eql(true));",
+                  "  pm.response.json().services.forEach(s => pm.expect(s.available).to.eql(true));",
                   "});"
                 ]
               }
@@ -337,7 +352,7 @@
                 "exec": [
                   "pm.test('status 200', () => pm.response.to.have.status(200));",
                   "pm.test('cumple los dos filtros', () => {",
-                  "  pm.response.json().forEach(s => {",
+                  "  pm.response.json().services.forEach(s => {",
                   "    pm.expect(s.category).to.eql('gas');",
                   "    pm.expect(s.available).to.eql(true);",
                   "  });",
@@ -433,14 +448,17 @@
           }
         },
         {
-          "name": "GET con id que no es ObjectId -> 404",
+          "name": "GET con id que no es ObjectId -> 400",
           "event": [
             {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "pm.test('status 404 y no 500', () => pm.response.to.have.status(404));"
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('corta en la validacion, antes de consultar la base', () => {",
+                  "  pm.expect(pm.response.json().detalles[0].campo).to.eql('id');",
+                  "});"
                 ]
               }
             }
@@ -627,6 +645,568 @@
                 "api",
                 "services",
                 "{{idInexistente}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET paginado -> 200 (page y limit)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve como mucho el limit pedido', () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.page).to.eql(2);",
+                  "  pm.expect(r.limit).to.eql(3);",
+                  "  pm.expect(r.services.length).to.be.at.most(3);",
+                  "});",
+                  "pm.test('en la pagina 2 hay anterior y el numero es el correcto', () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.hasPrevPage).to.eql(true);",
+                  "  pm.expect(r.prevPage).to.eql(1);",
+                  "});",
+                  "pm.test('totalPages es coherente con total y limit', () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.totalPages).to.eql(Math.max(1, Math.ceil(r.total / r.limit)));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?page=2&limit=3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "2"
+                },
+                {
+                  "key": "limit",
+                  "value": "3"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET ordenado por precio desc -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('viene ordenado de mayor a menor precio', () => {",
+                  "  const precios = pm.response.json().services.map(s => s.price);",
+                  "  const ordenado = [...precios].sort((a, b) => b - a);",
+                  "  pm.expect(precios).to.eql(ordenado);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?sortBy=price&order=desc&limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "sortBy",
+                  "value": "price"
+                },
+                {
+                  "key": "order",
+                  "value": "desc"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET ordenado por nombre asc -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('viene ordenado alfabeticamente', () => {",
+                  "  const nombres = pm.response.json().services.map(s => s.name);",
+                  "  const ordenado = [...nombres].sort((a, b) => a.localeCompare(b));",
+                  "  pm.expect(nombres).to.eql(ordenado);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?sortBy=name&order=asc&limit=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "sortBy",
+                  "value": "name"
+                },
+                {
+                  "key": "order",
+                  "value": "asc"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET pagina fuera de rango -> 200 (listado vacio, no error)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('no hay resultados pero la respuesta sigue siendo valida', () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.services).to.eql([]);",
+                  "  pm.expect(r.hasNextPage).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?page=9999&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "9999"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET limit por encima del maximo -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('dice cual es el parametro que esta mal', () => {",
+                  "  const r = pm.response.json();",
+                  "  pm.expect(r.detalles.map(d => d.campo)).to.include('limit');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?limit=500",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "500"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET page invalida -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('el detalle apunta a page', () => {",
+                  "  pm.expect(pm.response.json().detalles[0].campo).to.eql('page');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?page=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET page que no es numero -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?page=abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "abc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET sortBy no permitido -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('solo se puede ordenar por los campos previstos', () => {",
+                  "  pm.expect(pm.response.json().detalles[0].campo).to.eql('sortBy');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?sortBy=password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "sortBy",
+                  "value": "password"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET parametro desconocido -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/services?orden=asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ],
+              "query": [
+                {
+                  "key": "orden",
+                  "value": "asc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST con precio negativo -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('el detalle apunta a price', () => {",
+                  "  pm.expect(pm.response.json().detalles[0].campo).to.eql('price');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Servicio invalido\",\n  \"description\": \"Prueba de validacion\",\n  \"duration\": 30,\n  \"price\": -100,\n  \"category\": \"gas\",\n  \"available\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST con duracion cero -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Servicio invalido\",\n  \"description\": \"Prueba de validacion\",\n  \"duration\": 0,\n  \"price\": 100,\n  \"category\": \"gas\",\n  \"available\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST con un numero mandado como texto -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Servicio invalido\",\n  \"description\": \"Prueba de validacion\",\n  \"duration\": 30,\n  \"price\": \"9500\",\n  \"category\": \"gas\",\n  \"available\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST con un campo que no existe -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('avisa del campo de mas en vez de ignorarlo', () => {",
+                  "  pm.expect(pm.response.json().detalles.length).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Servicio invalido\",\n  \"description\": \"Prueba de validacion\",\n  \"duration\": 30,\n  \"price\": 100,\n  \"category\": \"gas\",\n  \"available\": true,\n  \"inventado\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT con el body vacio -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/services/{{servicioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "services",
+                "{{servicioId}}"
               ]
             }
           }
@@ -988,7 +1568,13 @@
                   "const services = pm.response.json().services;",
                   "pm.test('la relacion quedo guardada en mongo', () => {",
                   "  pm.expect(services.length).to.eql(2);",
-                  "  pm.expect(services.find(s => s.service === sid).quantity).to.eql(2);",
+                  "  pm.expect(services.find(s => s.service._id === sid).quantity).to.eql(2);",
+                  "});",
+                  "pm.test('populate reemplaza el ObjectId por el documento del servicio', () => {",
+                  "  const item = services.find(s => s.service._id === sid);",
+                  "  pm.expect(item.service).to.be.an('object');",
+                  "  ['name', 'price', 'duration', 'category'].forEach(campo =>",
+                  "    pm.expect(item.service).to.have.property(campo));",
                   "});"
                 ]
               }
@@ -1006,6 +1592,223 @@
                 "api",
                 "bookings",
                 "{{reservaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST con fecha inexistente en el calendario -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('el detalle apunta a date', () => {",
+                  "  pm.expect(pm.response.json().detalles[0].campo).to.eql('date');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientName\": \"Juan Perez\",\n  \"clientEmail\": \"juan@mail.com\",\n  \"date\": \"2026-02-31\",\n  \"time\": \"10:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST con email invalido -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientName\": \"Juan Perez\",\n  \"clientEmail\": \"juan-arroba-mail\",\n  \"date\": \"2026-09-15\",\n  \"time\": \"10:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST con hora fuera del reloj de 24 -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientName\": \"Juan Perez\",\n  \"clientEmail\": \"juan@mail.com\",\n  \"date\": \"2026-09-15\",\n  \"time\": \"25:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST con un estado que no existe -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientName\": \"Juan Perez\",\n  \"clientEmail\": \"juan@mail.com\",\n  \"date\": \"2026-09-15\",\n  \"time\": \"10:00\",\n  \"status\": \"lista\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET con un id que no es ObjectId -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('corta en la validacion, antes de consultar la base', () => {",
+                  "  pm.expect(pm.response.json().detalles[0].campo).to.eql('bid');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "abc"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST agregar servicio con ids invalidos -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('marca el identificador del servicio', () => {",
+                  "  pm.expect(pm.response.json().detalles.map(d => d.campo)).to.include('sid');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}/services/roto",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{reservaId}}",
+                "services",
+                "roto"
               ]
             }
           }
@@ -1378,6 +2181,38 @@
                 "api",
                 "messages",
                 "{{idInexistente}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET mensaje con id mal formado -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('el detalle apunta a mid', () => {",
+                  "  pm.expect(pm.response.json().detalles[0].campo).to.eql('mid');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/messages/abc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "messages",
+                "abc"
               ]
             }
           }

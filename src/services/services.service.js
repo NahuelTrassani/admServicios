@@ -1,21 +1,26 @@
 import servicesRepository from "../repositories/services.repository.js";
 import { esErrorDeValidacion } from "../utils/errors.js";
 
-export const getServices = async (filters = {}) => {
-  const services = await servicesRepository.getAll();
-  let result = services;
+//contar lo resuelve mongo con countDocuments: no se traen documentos para medir
+export const countServices = async (filtro = {}) => servicesRepository.count(filtro);
 
-  //filtrar es una regla de negocio, no trabajo del controller
-  if (filters.category) {
-    result = result.filter((s) => s.category === filters.category);
-  }
-  if (filters.available) {
-    result = result.filter(
-      (s) => s.available === (filters.available === "true"),
-    );
-  }
+//consulta paginada: mongo filtra, ordena y corta; aca se arman los metadatos
+export const searchServices = async (criterios) => {
+  const { items, total } = await servicesRepository.search(criterios);
+  const { page, limit } = criterios;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
 
-  return result;
+  return {
+    services: items,
+    total,
+    page,
+    limit,
+    totalPages,
+    hasPrevPage: page > 1,
+    hasNextPage: page < totalPages,
+    prevPage: page > 1 ? page - 1 : null,
+    nextPage: page < totalPages ? page + 1 : null,
+  };
 };
 
 export const getServiceById = async (id) => {

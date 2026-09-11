@@ -58,6 +58,12 @@ main {
   font-size: 0.9rem;
 }
 
+.aviso.pendiente {
+  background: #fdf6e3;
+  border-left-color: #c9a227;
+  color: #7a5d00;
+}
+
 .aviso {
   background: #eef4f0;
   border-left: 3px solid var(--acento);
@@ -269,4 +275,24 @@ main {
 
 .actividad li.nuevo {
   animation: aparecer 1.6s ease-out;
+}
+
+.paginacion {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.paginacion a {
+  padding: 0.4rem 0.9rem;
+  border: 1px solid var(--borde);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--acento);
+  text-decoration: none;
+  font-size: 0.88rem;
+}
+
+.paginacion a:hover {
+  border-color: var(--acento);
 }

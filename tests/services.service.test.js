@@ -3,7 +3,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 //se reemplaza el repository por un doble, asi los tests no tocan MongoDB
 vi.mock("../src/repositories/services.repository.js", () => ({
   default: {
-    getAll: vi.fn(),
+    search: vi.fn(),
+    count: vi.fn(),
     getById: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
@@ -28,40 +29,81 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe("getServices", () => {
-  const catalogo = [
-    { ...servicioBase, category: "mecanica", available: true },
-    { ...servicioBase, category: "informatica", available: false },
-    { ...servicioBase, category: "mecanica", available: false },
-  ];
+describe("searchServices", () => {
+  const criterios = {
+    category: "mecanica",
+    available: "true",
+    page: 2,
+    limit: 10,
+    sortBy: "price",
+    order: "desc",
+  };
 
-  it("sin filtros devuelve todos", async () => {
-    servicesRepository.getAll.mockResolvedValue(catalogo);
-    const result = await servicesService.getServices();
-    expect(result).toHaveLength(3);
+  it("le delega la consulta al repository tal cual la recibe", async () => {
+    servicesRepository.search.mockResolvedValue({ items: [], total: 0 });
+    await servicesService.searchServices(criterios);
+    expect(servicesRepository.search).toHaveBeenCalledWith(criterios);
   });
 
-  it("filtra por categoria", async () => {
-    servicesRepository.getAll.mockResolvedValue(catalogo);
-    const result = await servicesService.getServices({ category: "mecanica" });
-    expect(result).toHaveLength(2);
-    result.forEach((s) => expect(s.category).toBe("mecanica"));
-  });
-
-  it("filtra por disponibilidad convirtiendo el string a booleano", async () => {
-    servicesRepository.getAll.mockResolvedValue(catalogo);
-    const result = await servicesService.getServices({ available: "true" });
-    expect(result).toHaveLength(1);
-    expect(result[0].available).toBe(true);
-  });
-
-  it("combina los dos filtros", async () => {
-    servicesRepository.getAll.mockResolvedValue(catalogo);
-    const result = await servicesService.getServices({
-      category: "mecanica",
-      available: "false",
+  it("arma los metadatos de paginacion a partir del total", async () => {
+    servicesRepository.search.mockResolvedValue({
+      items: [servicioBase],
+      total: 42,
     });
-    expect(result).toHaveLength(1);
+
+    const result = await servicesService.searchServices({
+      page: 2,
+      limit: 10,
+      sortBy: "name",
+      order: "asc",
+    });
+
+    expect(result).toMatchObject({
+      services: [servicioBase],
+      total: 42,
+      page: 2,
+      limit: 10,
+      totalPages: 5,
+      hasPrevPage: true,
+      hasNextPage: true,
+      prevPage: 1,
+      nextPage: 3,
+    });
+  });
+
+  it("en la primera pagina no hay anterior", async () => {
+    servicesRepository.search.mockResolvedValue({ items: [], total: 5 });
+    const result = await servicesService.searchServices({ page: 1, limit: 10 });
+    expect(result.hasPrevPage).toBe(false);
+    expect(result.prevPage).toBe(null);
+  });
+
+  it("en la ultima pagina no hay siguiente", async () => {
+    servicesRepository.search.mockResolvedValue({ items: [], total: 20 });
+    const result = await servicesService.searchServices({ page: 2, limit: 10 });
+    expect(result.hasNextPage).toBe(false);
+    expect(result.nextPage).toBe(null);
+  });
+
+  it("sin resultados devuelve una sola pagina, no cero", async () => {
+    servicesRepository.search.mockResolvedValue({ items: [], total: 0 });
+    const result = await servicesService.searchServices({ page: 1, limit: 10 });
+    expect(result.totalPages).toBe(1);
+    expect(result.hasNextPage).toBe(false);
+  });
+});
+
+describe("countServices", () => {
+  it("cuenta sin filtro", async () => {
+    servicesRepository.count.mockResolvedValue(7);
+    expect(await servicesService.countServices()).toBe(7);
+    expect(servicesRepository.count).toHaveBeenCalledWith({});
+  });
+
+  it("le pasa el filtro al repository", async () => {
+    servicesRepository.count.mockResolvedValue(3);
+    await servicesService.countServices({ available: true });
+    expect(servicesRepository.count).toHaveBeenCalledWith({ available: true });
   });
 });
 

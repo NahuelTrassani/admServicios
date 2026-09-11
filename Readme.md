@@ -1,12 +1,14 @@
 # API REST - Sistema de Turnos y Reservas
 
-Pre-entrega 7 del curso Programación Backend I (CoderHouse).
+Pre-entrega 8 del curso Programación Backend I (CoderHouse).
 
 API REST construida con Express que expone tres recursos: `services` (los servicios que pueden reservarse), `bookings` (las reservas de los clientes) y `messages` (mensajes del sistema), con persistencia en **MongoDB Atlas** mediante Mongoose.
 
 Además de la API, el proyecto sirve vistas renderizadas en el servidor con Handlebars y actualiza esas vistas en tiempo real con Socket.io.
 
 Está organizado en cinco capas —router, controller, service, repository y DAO— cada una con una responsabilidad única y sin conocer más que la siguiente.
+
+El listado de servicios se consulta con **filtros, ordenamiento y paginación resueltos en MongoDB**, todo lo que entra por la API se valida con **Zod** en un middleware previo al controller, y las reservas se devuelven con **populate** para resolver la referencia a cada servicio.
 
 ## Nota sobre el DELETE de servicios
 
@@ -210,6 +212,12 @@ src/
     bookings.router.js          endpoints de bookings
     messages.router.js          endpoints de messages
     views.router.js             rutas de las vistas
+  validations/
+    service.validation.js       schemas de Zod de services
+    booking.validation.js       schemas de Zod de bookings y de sus params
+    message.validation.js       schemas de Zod de messages
+  middlewares/
+    validate.js                 corre un schema contra body, params o query
   controllers/
     services.controller.js      request/response de services
     bookings.controller.js      request/response de bookings
@@ -253,19 +261,19 @@ postman/                        colección de pruebas de la API
 
 | Endpoint | Controller y Service | Repository y DAO |
 |---|---|---|
-| `GET /api/services` | `getServices` | `getAll` |
+| `GET /api/services` | `getServices` / `searchServices` | `search` |
 | `GET /api/services/:sid` | `getServiceById` | `getById` |
 | `POST /api/services` | `createService` | `create` |
 | `PUT /api/services/:sid` | `updateService` | `update` |
 | `DELETE /api/services/:sid` | `deleteService` | `update` |
 | `POST /api/bookings` | `createBooking` | `create` |
-| `GET /api/bookings/:bid` | `getBookingById` | `getById` |
+| `GET /api/bookings/:bid` | `getBookingById` / `getBookingWithServices` | `getByIdPopulated` |
 | `POST /api/bookings/:bid/services/:sid` | `addServiceToBooking` | `getById` + `update` |
 | `GET /api/messages` | `getMessages` | `getAll` |
 | `PUT /api/messages/:mid` | `updateMessage` | `update` |
 | `DELETE /api/messages/:mid` | `deleteMessage` | `delete` |
-| `GET /views/services` | `renderServices` | `getAll` |
-| `GET /views/availability` | `renderAvailability` | `getAllPopulated` |
+| `GET /views/services` | `renderServices` / `searchServices` | `search` |
+| `GET /views/availability` | `renderAvailability` / `countServices` | `getAllPopulated` + `count` |
 | `GET /views/activity` | `renderActivity` | `getAll` |
 | `GET /api/messages/:mid` | `getMessageById` | `getById` |
 | `POST /api/messages` | `createMessage` | `create` |
@@ -276,28 +284,140 @@ En `addServiceToBooking`, el controller consulta por separado la reserva y el se
 
 ## Validaciones
 
-Las validaciones están repartidas en dos capas, cada una con una responsabilidad distinta.
+Las validaciones están repartidas en tres capas, cada una con una responsabilidad distinta y ninguna de las tres reemplaza a la otra.
 
-**El modelo valida el dato**: qué campos son obligatorios, de qué tipo, en qué rango y con qué formato.
+| Capa | Qué controla | Con qué |
+|---|---|---|
+| Middleware | la **forma** de lo que entra: tipos, formatos, rangos, campos de más | Zod |
+| Service | las **reglas del negocio**: qué significa dar de baja, cuándo incrementar una cantidad | código propio |
+| Modelo | la **integridad de lo guardado**: última línea si algo escribe sin pasar por la API | Mongoose |
+
+### Por qué un middleware y no una validación dentro del controller
+
+El controller no tiene que saber si el `price` vino como número o como texto. Cuando llega a ejecutarse, el dato ya está validado y convertido. Si no lo estaba, el controller nunca se ejecuta: el middleware cortó la cadena con un `400`.
+
+```js
+// src/routes/services.router.js
+router.get("/", validateQuery(listServicesQuerySchema), getServices);
+router.post("/", validateBody(createServiceSchema), createService);
+router.put("/:id", validateBody(updateServiceSchema), updateService);
+```
+
+```js
+// src/middlewares/validate.js
+const validar = (origen) => (esquema) => (req, res, next) => {
+  const resultado = esquema.safeParse(req[origen]);
+
+  if (!resultado.success) {
+    return res.status(400).json({
+      error: "Datos inválidos",
+      detalles: traducirErrores(resultado.error),
+    });
+  }
+
+  req[origen] = resultado.data;
+  next();
+};
+```
+
+`safeParse` no lanza: devuelve `{ success, data | error }`. Eso permite decidir qué responder en vez de depender de un `try/catch`.
+
+El `req[origen] = resultado.data` es la parte que más cambia el resto del código: lo que sigue recibe el dato **ya convertido y con los defaults puestos**. Por eso el controller de listado no reconvierte nada.
+
+### El query no se pisa, se deja en `req.consulta`
+
+En Express 5 `req.query` es de solo lectura, así que el resultado del parseo va a una propiedad aparte:
+
+```js
+export const validateQuery = (esquema) => (req, res, next) => {
+  const resultado = esquema.safeParse(req.query);
+  if (!resultado.success) { /* 400 */ }
+
+  //el resultado va a req.consulta y no pisa req.query, para no alterar lo que mando el cliente
+  req.consulta = resultado.data;
+  next();
+};
+```
+
+### Qué valida cada schema
+
+Los schemas están en `src/validations/`, uno por recurso.
 
 | Campo | Regla |
 |---|---|
+| `service.name` | texto, 1 a 80 caracteres, se recortan los espacios |
+| `service.description` | texto, 1 a 300 caracteres |
+| `service.duration` | entero, mínimo 1 minuto |
 | `service.price` | número, mínimo 0 (un servicio gratuito es válido) |
-| `service.duration` | número, mínimo 1 |
-| `service.category` | se normaliza a minúsculas |
-| `booking.clientEmail` | formato de email, se normaliza a minúsculas |
+| `service.category` | texto, 1 a 40 caracteres |
+| `service.available` | booleano, obligatorio |
+| `booking.clientEmail` | formato de email |
+| `booking.date` | formato `AAAA-MM-DD` **y** que el día exista en el calendario |
 | `booking.time` | formato `HH:MM` en 24 horas |
-| `booking.status` | solo `pendiente`, `confirmada` o `cancelada` |
-| `booking.services[].quantity` | número, mínimo 1 |
-| `message.message` | máximo 500 caracteres |
+| `booking.status` | solo `pendiente`, `confirmada` o `cancelada`; por defecto `pendiente` |
+| `:bid` y `:sid` | 24 caracteres hexadecimales (formato de un ObjectId) |
+| `message.user` | texto, 1 a 40 caracteres |
+| `message.message` | texto, 1 a 500 caracteres |
 
-**El service valida el negocio**: qué significa dar de baja un servicio, cuándo incrementar la cantidad de un servicio en una reserva, cómo filtrar un listado.
+**Tres decisiones que no son obvias:**
 
-### Cómo se traduce un error de validación
+`.strict()` en todos los schemas. Un campo que no está declarado no se ignora: se rechaza. Mandar `{ "nombre": "X" }` en vez de `{ "name": "X" }` devuelve un error que dice qué pasó, en vez de guardar un servicio sin nombre.
 
-Cuando el schema rechaza un documento, Mongoose lanza un error. Si ese error llegara al `catch` genérico del controller, la API respondería `500` — es decir, culparía al servidor por un dato que mandó mal el cliente.
+`.partial()` más un `.refine()` en los updates. El PUT acepta mandar un solo campo, pero no acepta un body vacío:
 
-Para evitarlo, el service distingue los dos casos:
+```js
+export const updateServiceSchema = createServiceSchema
+  .partial()
+  .refine((data) => Object.keys(data).length > 0, {
+    error: "Hay que enviar al menos un campo para actualizar",
+  });
+```
+
+**La fecha se compara contra sí misma.** `Date.parse("2026-02-31")` no falla: JavaScript corre esa fecha al 3 de marzo y devuelve un número válido. Una validación que solo mire si el parseo funciona deja pasar días que no existen. La única forma de detectarlo es reconstruir la fecha y ver si coincide con lo que se escribió:
+
+```js
+.refine((valor) => {
+  const [anio, mes, dia] = valor.split("-").map(Number);
+  const fecha = new Date(Date.UTC(anio, mes - 1, dia));
+  return (
+    fecha.getUTCFullYear() === anio &&
+    fecha.getUTCMonth() === mes - 1 &&
+    fecha.getUTCDate() === dia
+  );
+}, { error: "La fecha no existe en el calendario" })
+```
+
+### Cómo se ve un error de validación
+
+La respuesta dice **qué campo** está mal y **por qué**, no solo que algo falló:
+
+```json
+{
+  "error": "Datos inválidos",
+  "detalles": [
+    { "campo": "price", "mensaje": "El precio no puede ser negativo" },
+    { "campo": "duration", "mensaje": "La duración debe ser de al menos 1 minuto" }
+  ]
+}
+```
+
+Vienen **todos** los errores juntos, no el primero: el cliente corrige de una sola vez.
+
+La traducción de la estructura de Zod a esa forma es una función sola:
+
+```js
+const traducirErrores = (error) =>
+  error.issues.map((issue) => ({
+    campo: issue.path.join(".") || "(cuerpo)",
+    mensaje: issue.message,
+  }));
+```
+
+### Por qué el modelo sigue validando
+
+Con el middleware adelante, ningún dato inválido debería llegar al modelo. Las reglas de Mongoose quedan igual porque cubren lo que entra **sin pasar por la API**: un seed, una corrección manual, un script. Son dos redes a distinta altura, no la misma regla escrita dos veces.
+
+Si aun así el modelo rechaza algo, el service distingue el error del cliente del error del servidor:
 
 ```js
 // src/utils/errors.js
@@ -306,7 +426,6 @@ export const esErrorDeValidacion = (error) =>
 ```
 
 ```js
-// src/services/services.service.js
 try {
   return await servicesRepository.create(data);
 } catch (error) {
@@ -318,7 +437,7 @@ try {
 }
 ```
 
-Un dato inválido devuelve `null`, que el controller ya traduce a `400`. Cualquier otro error —una caída de la base, por ejemplo— se propaga y sigue respondiendo `500`, que en ese caso sí corresponde.
+Un dato inválido devuelve `null`, que el controller traduce a `400`. Cualquier otro error —una caída de la base, por ejemplo— se propaga y sigue respondiendo `500`, que en ese caso sí corresponde.
 
 ## Recurso: services
 
@@ -378,18 +497,87 @@ Ante un error inesperado, todos los endpoints responden `500`.
 
 ### GET /api/services
 
-Devuelve el listado completo:
+Devuelve el listado paginado:
 
 ```
 GET http://localhost:8080/api/services
 ```
 
-Acepta filtros opcionales por query params, que pueden combinarse:
+```json
+{
+  "services": [ { "_id": "68b1...", "name": "Cambio de aceite", "price": 12000 } ],
+  "total": 42,
+  "page": 1,
+  "limit": 10,
+  "totalPages": 5,
+  "hasPrevPage": false,
+  "hasNextPage": true,
+  "prevPage": null,
+  "nextPage": 2
+}
+```
+
+#### Query params
+
+| Param | Valores | Default | Qué hace |
+|---|---|---|---|
+| `category` | texto | — | filtra por categoría exacta |
+| `available` | `true` / `false` | — | filtra por disponibilidad |
+| `page` | entero ≥ 1 | `1` | número de página |
+| `limit` | entero 1 a 100 | `10` | resultados por página |
+| `sortBy` | `name`, `price`, `duration`, `category`, `createdAt` | `name` | campo de ordenamiento |
+| `order` | `asc` / `desc` | `asc` | sentido del orden |
+
+Todos son opcionales y se combinan entre sí:
 
 ```
 GET http://localhost:8080/api/services?category=mecanica
-GET http://localhost:8080/api/services?available=true
-GET http://localhost:8080/api/services?category=mecanica&available=true
+GET http://localhost:8080/api/services?available=true&page=2&limit=5
+GET http://localhost:8080/api/services?sortBy=price&order=desc
+GET http://localhost:8080/api/services?category=mecanica&available=true&sortBy=price&order=desc&page=1&limit=20
+```
+
+Un parámetro fuera de rango o que no está en la lista devuelve `400` con el detalle:
+
+```
+GET http://localhost:8080/api/services?limit=500
+```
+
+```json
+{
+  "error": "Parámetros de consulta inválidos",
+  "detalles": [
+    { "campo": "limit", "mensaje": "El límite no puede superar los 100 resultados por página" }
+  ]
+}
+```
+
+El tope de `limit` no es decorativo: sin él, un `?limit=999999` obliga a la base a devolver el catálogo entero en una sola respuesta.
+
+#### Quién hace el trabajo
+
+El filtrado, el ordenamiento y el corte los resuelve MongoDB. Nunca se traen todos los documentos para descartarlos en memoria:
+
+```js
+// src/dao/services.dao.js
+const orden = { [sortBy]: order === "desc" ? -1 : 1 };
+const salteo = (page - 1) * limit;
+
+//las dos consultas van en paralelo: el total no depende del listado
+const [items, total] = await Promise.all([
+  Service.find(filtro).sort(orden).skip(salteo).limit(limit),
+  Service.countDocuments(filtro),
+]);
+```
+
+El service arma los metadatos a partir de ese total, y el controller solo responde:
+
+```js
+export const getServices = async (req, res) => {
+  //req.consulta viene del middleware con los tipos convertidos y los defaults puestos
+  const resultado = await servicesService.searchServices(req.consulta);
+  res.status(200).json(resultado);
+};
 ```
 
 ### GET /api/services/:id
@@ -496,7 +684,45 @@ Todos los campos son obligatorios. Si falta alguno, responde `400`.
 GET http://localhost:8080/api/bookings/68b1f2a4c9e77d3b1a4f0099
 ```
 
-Devuelve la reserva con ese id, o `404` si no existe.
+Devuelve la reserva con ese id, o `404` si no existe. Si el id no tiene formato de ObjectId devuelve `400`: la validación corta antes de consultar la base.
+
+La respuesta viene con **populate**: donde la base guarda un `ObjectId`, la API devuelve el documento completo del servicio.
+
+Lo que está guardado en Mongo:
+
+```json
+{ "services": [ { "service": "68b1f2a4c9e77d3b1a4f0012", "quantity": 2 } ] }
+```
+
+Lo que devuelve la API:
+
+```json
+{
+  "services": [
+    {
+      "service": {
+        "_id": "68b1f2a4c9e77d3b1a4f0012",
+        "name": "Cambio de aceite",
+        "price": 12000,
+        "duration": 45,
+        "category": "mecanica"
+      },
+      "quantity": 2
+    }
+  ]
+}
+```
+
+La base sigue guardando la referencia: `populate` resuelve la relación al momento de leer, no duplica el dato.
+
+```js
+// src/dao/bookings.dao.js
+async getByIdPopulated(id) {
+  return Booking.findById(id).populate("services.service");
+}
+```
+
+Sin populate, un cliente que quiera mostrar el nombre de cada servicio tiene que hacer un pedido más por cada id. Con populate resuelve la pantalla con una sola llamada.
 
 ### POST /api/bookings/:bid/services/:sid
 
@@ -580,8 +806,13 @@ Las dos toman los datos de MongoDB pasando por las mismas capas que la API: el c
 
 ```js
 // src/controllers/views.controller.js
-const services = await servicesService.getServices(req.query);
-res.render("services", { title: "Servicios", services: services.map((s) => s.toObject()) });
+const criterios = listServicesQuerySchema.parse({ limit: "50", ...req.query });
+const resultado = await servicesService.searchServices(criterios);
+res.render("services", {
+  title: "Servicios",
+  services: resultado.services.map((s) => s.toObject()),
+  paginacion: { total: resultado.total, page: resultado.page, totalPages: resultado.totalPages },
+});
 ```
 
 El `.toObject()` es necesario porque Handlebars no puede leer documentos de Mongoose directamente: hay que convertirlos a objetos planos o los campos salen vacíos.
@@ -597,7 +828,7 @@ async getAllPopulated() {
 }
 ```
 
-Va en un método **aparte** de `getAll` a propósito: si estuviera dentro, la API REST empezaría a devolver el servicio completo dentro de cada reserva y se rompería el requisito de guardar solo la referencia.
+Va en un método **aparte** del listado común a propósito: si estuviera dentro, la API REST empezaría a devolver el servicio completo dentro de cada reserva y se rompería el requisito de guardar solo la referencia.
 
 ## Tiempo real con Socket.io
 
@@ -704,20 +935,40 @@ El repositorio incluye una colección lista para importar en `postman/admServici
 
 Para usarla: importar el archivo en Postman, levantar el servidor con `pnpm start` y ejecutar la colección completa con **Run collection**. Cada request valida automáticamente el código de estado y el contenido esperado.
 
+También se puede correr desde la terminal, sin abrir Postman:
+
+```bash
+npx newman run postman/admServicios.postman_collection.json --env-var baseUrl=http://localhost:8080
+```
+
+Son 65 requests con 119 validaciones.
+
 Como los identificadores son `ObjectId` generados por MongoDB, la colección no usa valores fijos: los primeros requests crean los documentos y guardan sus `_id` en variables que reutilizan los siguientes. Por eso conviene ejecutarla completa y en orden.
 
 Casos cubiertos:
 
 | Recurso | Caso | Esperado |
 |---------|------|----------|
-| services | Listar todos | 200 |
+| services | Listar todos | 200, con el listado y los metadatos de paginación |
 | services | Filtrar por category, por available y ambos combinados | 200 |
+| services | Paginar con `page` y `limit` | 200, `prevPage` y `totalPages` coherentes |
+| services | Ordenar por precio descendente y por nombre ascendente | 200, en el orden pedido |
+| services | Pedir una página fuera de rango | 200 con el listado vacío, no un error |
+| services | `limit` por encima del máximo | 400, indicando el campo `limit` |
+| services | `page` en cero o que no es número | 400 |
+| services | `sortBy` fuera de la lista permitida | 400 |
+| services | Un query param que no existe | 400 |
 | services | Consultar por id existente | 200 |
 | services | Consultar por id inexistente | 404 |
-| services | Consultar con un id que no es un ObjectId válido | 404, no 500 |
+| services | Consultar con un id que no es un ObjectId válido | 400, corta antes de la base |
+| messages | Consultar con un id mal formado | 400 |
 | services | Crear con todos los campos | 201 |
 | services | Crear con `price: 0` | 201 |
-| services | Crear con un campo faltante | 400 |
+| services | Crear con un campo faltante | 400, con el campo y el motivo |
+| services | Crear con precio negativo o duración cero | 400 |
+| services | Crear mandando un número como texto | 400 |
+| services | Crear con un campo que no está en el schema | 400, no se ignora |
+| services | Actualizar con el body vacío | 400 |
 | services | Crear sin body | 400 |
 | services | Actualizar | 200, devuelve el documento ya actualizado |
 | services | Actualizar uno inexistente | 404 |
@@ -730,6 +981,10 @@ Casos cubiertos:
 | services | Dar de baja uno inexistente | 404 |
 | bookings | Crear reserva | 201, con `services` vacío |
 | bookings | Crear con un campo faltante o sin body | 400 |
+| bookings | Crear con una fecha que no existe en el calendario | 400 |
+| bookings | Crear con un email, una hora o un estado inválidos | 400 |
+| bookings | Consultar con un id que no es un ObjectId | 400, corta antes de la base |
+| bookings | Agregar un servicio con un id mal formado | 400, indicando `sid` |
 | bookings | Consultar por id | 200 |
 | bookings | Consultar una inexistente | 404 |
 | bookings | Agregar un servicio | 200, `quantity: 1`, guarda solo la referencia |
@@ -738,6 +993,7 @@ Casos cubiertos:
 | bookings | Agregar un servicio inexistente | 404 |
 | bookings | Agregar a una reserva inexistente | 404 |
 | bookings | Releer la reserva | 200, la relación quedó persistida en MongoDB |
+| bookings | Verificar el populate | el `service` viene como documento completo, no como id |
 
 ## Tests automatizados
 
@@ -752,10 +1008,12 @@ Los archivos están en `tests/`:
 
 | Archivo | Qué prueba |
 |---|---|
-| `services.service.test.js` | filtros del listado, validaciones de creación, baja lógica |
+| `services.service.test.js` | metadatos de paginación, validaciones de creación, baja lógica |
 | `bookings.service.test.js` | creación, y la regla de incrementar `quantity` sin duplicar |
 | `messages.service.test.js` | creación, consulta, edición y borrado de mensajes |
-| `models.test.js` | las validaciones de los tres schemas |
+| `models.test.js` | las validaciones de los tres schemas de Mongoose |
+| `validations.test.js` | los schemas de Zod: qué aceptan y qué rechazan |
+| `validate.middleware.test.js` | que el middleware corte con `400` y no llame al controller |
 | `services.controller.test.js` | códigos HTTP y emisión de eventos |
 | `views.controller.test.js` | render de las vistas y conversión de documentos |
 | `sockets.test.js` | recepción de notas, validación y difusión |
@@ -764,7 +1022,7 @@ Los archivos están en `tests/`:
 
 ```js
 vi.mock("../src/repositories/services.repository.js", () => ({
-  default: { getAll: vi.fn(), create: vi.fn(), update: vi.fn() },
+  default: { search: vi.fn(), count: vi.fn(), create: vi.fn(), update: vi.fn() },
 }));
 
 it("da de baja marcando available en false, no borra el documento", async () => {

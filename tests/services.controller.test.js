@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../src/services/services.service.js", () => ({
-  getServices: vi.fn(),
+  searchServices: vi.fn(),
+  countServices: vi.fn(),
   getServiceById: vi.fn(),
   createService: vi.fn(),
   updateService: vi.fn(),
@@ -38,28 +39,37 @@ beforeEach(() => {
 });
 
 describe("getServices", () => {
-  it("responde 200 con el listado", async () => {
-    servicesService.getServices.mockResolvedValue([servicio]);
+  const paginado = {
+    services: [servicio],
+    total: 1,
+    page: 1,
+    limit: 10,
+    totalPages: 1,
+    hasPrevPage: false,
+    hasNextPage: false,
+    prevPage: null,
+    nextPage: null,
+  };
+
+  it("responde 200 con el listado y los metadatos de paginacion", async () => {
+    servicesService.searchServices.mockResolvedValue(paginado);
     const res = armarRes();
-    await controller.getServices(armarReq(), res);
+    await controller.getServices(armarReq({ consulta: {} }), res);
     expect(res.status).toHaveBeenCalledWith(200);
-    expect(res.json).toHaveBeenCalledWith([servicio]);
+    expect(res.json).toHaveBeenCalledWith(paginado);
   });
 
-  it("le pasa los filtros del query al service", async () => {
-    servicesService.getServices.mockResolvedValue([]);
-    const req = armarReq({ query: { category: "mecanica", available: "true" } });
-    await controller.getServices(req, armarRes());
-    expect(servicesService.getServices).toHaveBeenCalledWith({
-      category: "mecanica",
-      available: "true",
-    });
+  it("usa req.consulta, que es lo que dejo el middleware de validacion", async () => {
+    servicesService.searchServices.mockResolvedValue(paginado);
+    const criterios = { category: "mecanica", page: 2, limit: 5, sortBy: "price", order: "desc" };
+    await controller.getServices(armarReq({ consulta: criterios }), armarRes());
+    expect(servicesService.searchServices).toHaveBeenCalledWith(criterios);
   });
 
   it("responde 500 si el service falla", async () => {
-    servicesService.getServices.mockRejectedValue(new Error("caida"));
+    servicesService.searchServices.mockRejectedValue(new Error("caida"));
     const res = armarRes();
-    await controller.getServices(armarReq(), res);
+    await controller.getServices(armarReq({ consulta: {} }), res);
     expect(res.status).toHaveBeenCalledWith(500);
   });
 });
