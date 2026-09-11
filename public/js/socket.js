@@ -3,6 +3,7 @@ const socket = io();
 
 const lista = document.getElementById("listaServicios");
 const total = document.getElementById("total");
+const listaReservas = document.getElementById("listaReservas");
 const totalReservas = document.getElementById("totalReservas");
 
 const precio = (n) => `$${n}`;
@@ -51,14 +52,61 @@ socket.on("servicioActualizado", (servicio) => {
   anterior.replaceWith(fila);
 });
 
-//las reservas cambian poco y su vista incluye datos relacionados,
-//asi que se recarga en lugar de reconstruir el html a mano
-socket.on("reservaCreada", () => {
-  if (totalReservas) window.location.reload();
+const bloqueDeReserva = (reserva) => {
+  const article = document.createElement("article");
+  article.className = "reserva";
+  article.dataset.id = reserva._id;
+
+  const servicios = reserva.services?.length
+    ? `<ul class="servicios">
+        ${reserva.services
+          .map(
+            (item) =>
+              `<li>${item.service?.name ?? "servicio"}
+                <span class="cantidad">x${item.quantity}</span>
+              </li>`,
+          )
+          .join("")}
+      </ul>`
+    : `<p class="sin-servicios">Sin servicios asociados.</p>`;
+
+  article.innerHTML = `
+    <header>
+      <h3>${reserva.clientName}</h3>
+      <span class="estado ${reserva.status}">${reserva.status}</span>
+    </header>
+    <p class="dato">${reserva.clientEmail}</p>
+    <p class="dato">${new Date(reserva.date).toLocaleDateString("es-AR")} a las ${reserva.time}</p>
+    ${servicios}
+  `;
+  return article;
+};
+
+socket.on("reservaCreada", (reserva) => {
+  if (!listaReservas) return;
+
+  listaReservas.querySelector(".vacio")?.remove();
+  const bloque = bloqueDeReserva(reserva);
+  bloque.classList.add("nuevo");
+  listaReservas.appendChild(bloque);
+
+  if (totalReservas) {
+    totalReservas.textContent =
+      listaReservas.querySelectorAll("article[data-id]").length;
+  }
 });
 
-socket.on("reservaActualizada", () => {
-  if (totalReservas) window.location.reload();
+socket.on("reservaActualizada", (reserva) => {
+  if (!listaReservas) return;
+
+  const anterior = listaReservas.querySelector(
+    `article[data-id="${reserva._id}"]`,
+  );
+  if (!anterior) return;
+
+  const bloque = bloqueDeReserva(reserva);
+  bloque.classList.add("actualizado");
+  anterior.replaceWith(bloque);
 });
 
 // ---- panel de actividad ----

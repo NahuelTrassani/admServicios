@@ -19,6 +19,13 @@ class BookingsDao {
     return Booking.findById(id);
   }
 
+  async getByIdPopulated(id) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
+    return Booking.findById(id).populate("services.service");
+  }
+
   async create(data) {
     return Booking.create(data);
   }

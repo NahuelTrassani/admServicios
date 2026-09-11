@@ -8,7 +8,11 @@ export const createBooking = async (req, res) => {
     const newBooking = await bookingService.createBooking(bookingData);
     if (newBooking) {
       const io = req.app.get("io");
-      io?.emit("reservaCreada", newBooking);
+      //la vista muestra el nombre de cada servicio: se emite la reserva con populate
+      const conServicios = await bookingService.getBookingWithServices(
+        newBooking._id,
+      );
+      io?.emit("reservaCreada", conServicios);
       registrarActividad(io, "sistema", `Nueva reserva de ${newBooking.clientName}`);
       res.status(201).json(newBooking);
     } else {
@@ -54,8 +58,8 @@ export const addServiceToBooking = async (req, res) => {
       bookingId,
       serviceId,
     );
-    //la vista de disponibilidad muestra los servicios de cada reserva
-    req.app.get("io")?.emit("reservaActualizada", updatedBooking);
+    const conServicios = await bookingService.getBookingWithServices(bookingId);
+    req.app.get("io")?.emit("reservaActualizada", conServicios);
     res.status(200).json(updatedBooking);
   } catch (error) {
     res

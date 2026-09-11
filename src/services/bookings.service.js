@@ -11,6 +11,11 @@ export const getBookingsWithServices = async () => {
   return bookingsRepository.getAllPopulated();
 };
 
+//la vista muestra el nombre de cada servicio, no el ObjectId
+export const getBookingWithServices = async (id) => {
+  return bookingsRepository.getByIdPopulated(id);
+};
+
 export const getBookingById = async (id) => {
   return bookingsRepository.getById(id);
 };
