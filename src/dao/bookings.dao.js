@@ -2,12 +2,8 @@ import mongoose from "mongoose";
 import Booking from "../models/booking.model.js";
 
 class BookingsDao {
-  async getAll() {
-    return Booking.find();
-  }
-
   //populate resuelve la referencia y trae el servicio completo en vez del ObjectId.
-  //va aparte de getAll para no cambiar lo que devuelve la API REST
+  //lo usan las vistas: la API REST guarda y devuelve la referencia
   async getAllPopulated() {
     return Booking.find().populate("services.service");
   }

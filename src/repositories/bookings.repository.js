@@ -5,10 +5,6 @@ class BookingsRepository {
     this.dao = dao;
   }
 
-  async getAll() {
-    return this.dao.getAll();
-  }
-
   async getAllPopulated() {
     return this.dao.getAllPopulated();
   }

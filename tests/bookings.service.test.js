@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../src/repositories/bookings.repository.js", () => ({
   default: {
-    getAll: vi.fn(),
     getById: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),

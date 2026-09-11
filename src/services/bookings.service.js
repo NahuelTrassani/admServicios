@@ -2,10 +2,6 @@ import bookingsRepository from "../repositories/bookings.repository.js";
 import { getServiceById } from "./services.service.js";
 import { esErrorDeValidacion } from "../utils/errors.js";
 
-export const getBookings = async () => {
-  return bookingsRepository.getAll();
-};
-
 //devuelve las reservas con los datos del servicio resueltos, para mostrarlas en las vistas
 export const getBookingsWithServices = async () => {
   return bookingsRepository.getAllPopulated();
