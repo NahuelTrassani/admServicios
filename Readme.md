@@ -413,6 +413,17 @@ const traducirErrores = (error) =>
   }));
 ```
 
+### Por qué un id mal formado devuelve 400 y no 404
+
+Los tres recursos validan el id que viaja en la URL con la misma regla, definida una sola vez en `src/validations/objectId.js`. Un id que no tiene forma de ObjectId corta con `400` antes de consultar la base.
+
+La alternativa era dejarlo en `404`, que es lo que respondía antes. Se cambió por dos motivos:
+
+- **`404` es una respuesta sobre el recurso**: significa "busqué y no está". Con un id como `abc` no se buscó nada, porque ni siquiera es un identificador. Lo que está mal es el pedido, y eso es un `400`.
+- **Coherencia entre recursos**: `bookings` ya validaba sus params. Que `services` y `messages` respondieran distinto ante el mismo tipo de error era una inconsistencia de la API, no una decisión.
+
+Un id **bien formado pero inexistente** sigue devolviendo `404`, como corresponde.
+
 ### Por qué el modelo sigue validando
 
 Con el middleware adelante, ningún dato inválido debería llegar al modelo. Las reglas de Mongoose quedan igual porque cubren lo que entra **sin pasar por la API**: un seed, una corrección manual, un script. Son dos redes a distinta altura, no la misma regla escrita dos veces.
@@ -749,6 +760,8 @@ Devuelve la reserva completa actualizada:
   ]
 }
 ```
+
+Este endpoint devuelve la referencia **sin poblar**, a diferencia del `GET`. Es a propósito: lo que responde es el estado que quedó guardado. El populate es una decisión de lectura, y el endpoint de lectura es el `GET`.
 
 ## Recurso: messages
 
