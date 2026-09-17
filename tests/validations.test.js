@@ -7,8 +7,9 @@ import {
 } from "../src/validations/service.validation.js";
 import {
   createBookingSchema,
-  addServiceParamsSchema,
+  bookingServiceParamsSchema,
   bookingIdParamSchema,
+  updateQuantitySchema,
 } from "../src/validations/booking.validation.js";
 import {
   createMessageSchema,
@@ -211,7 +212,7 @@ describe("schemas de params", () => {
 
   it("acepta un ObjectId bien formado", () => {
     expect(bookingIdParamSchema.safeParse({ bid: id }).success).toBe(true);
-    expect(addServiceParamsSchema.safeParse({ bid: id, sid: id }).success).toBe(true);
+    expect(bookingServiceParamsSchema.safeParse({ bid: id, sid: id }).success).toBe(true);
   });
 
   it("rechaza un id corto o con caracteres no hexadecimales", () => {
@@ -220,7 +221,7 @@ describe("schemas de params", () => {
   });
 
   it("marca cual de los dos identificadores esta mal", () => {
-    const r = addServiceParamsSchema.safeParse({ bid: id, sid: "roto" });
+    const r = bookingServiceParamsSchema.safeParse({ bid: id, sid: "roto" });
     expect(r.success).toBe(false);
     expect(campoQueFallo(r)).toBe("sid");
   });
@@ -243,5 +244,26 @@ describe("schemas de mensajes", () => {
   it("el update acepta parcial pero no vacio", () => {
     expect(updateMessageSchema.safeParse({ message: "editado" }).success).toBe(true);
     expect(updateMessageSchema.safeParse({}).success).toBe(false);
+  });
+});
+
+describe("updateQuantitySchema", () => {
+  it("acepta un entero mayor a cero", () => {
+    expect(updateQuantitySchema.safeParse({ quantity: 3 }).success).toBe(true);
+  });
+
+  it("rechaza cero: para sacar un servicio esta el DELETE", () => {
+    expect(updateQuantitySchema.safeParse({ quantity: 0 }).success).toBe(false);
+  });
+
+  it("rechaza negativos, fracciones y texto", () => {
+    expect(updateQuantitySchema.safeParse({ quantity: -1 }).success).toBe(false);
+    expect(updateQuantitySchema.safeParse({ quantity: 1.5 }).success).toBe(false);
+    expect(updateQuantitySchema.safeParse({ quantity: "2" }).success).toBe(false);
+  });
+
+  it("rechaza el body vacio y los campos de mas", () => {
+    expect(updateQuantitySchema.safeParse({}).success).toBe(false);
+    expect(updateQuantitySchema.safeParse({ quantity: 2, service: "x" }).success).toBe(false);
   });
 });

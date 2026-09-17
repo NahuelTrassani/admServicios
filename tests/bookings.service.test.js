@@ -3,8 +3,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("../src/repositories/bookings.repository.js", () => ({
   default: {
     getById: vi.fn(),
+    getActiveBySlot: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
@@ -17,6 +19,7 @@ const bookingsRepository = (
 ).default;
 const { getServiceById } = await import("../src/services/services.service.js");
 const bookingsService = await import("../src/services/bookings.service.js");
+const { TurnoOcupadoError } = await import("../src/utils/errors.js");
 
 const SERVICIO_ID = "68b1f2a4c9e77d3b1a4f0012";
 const OTRO_SERVICIO_ID = "68b1f2a4c9e77d3b1a4f0044";
@@ -34,7 +37,7 @@ const reservaBase = {
 const objectId = (valor) => ({ toString: () => valor });
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
 });
 
 describe("createBooking", () => {
@@ -159,5 +162,135 @@ describe("getBookingById", () => {
     const result = await bookingsService.getBookingById(RESERVA_ID);
     expect(bookingsRepository.getById).toHaveBeenCalledWith(RESERVA_ID);
     expect(result).toEqual(reservaBase);
+  });
+});
+
+describe("turno ocupado", () => {
+  it("rechaza la reserva si ya hay otra activa en esa fecha y hora", async () => {
+    bookingsRepository.getActiveBySlot.mockResolvedValue({ _id: "otra" });
+
+    await expect(bookingsService.createBooking(reservaBase)).rejects.toBeInstanceOf(
+      TurnoOcupadoError,
+    );
+    expect(bookingsRepository.getActiveBySlot).toHaveBeenCalledWith(
+      reservaBase.date,
+      reservaBase.time,
+    );
+    expect(bookingsRepository.create).not.toHaveBeenCalled();
+  });
+
+  it("si dos pedidos pasan la consulta a la vez, el indice unico frena al segundo", async () => {
+    bookingsRepository.getActiveBySlot.mockResolvedValue(null);
+    const duplicada = new Error("E11000 duplicate key error");
+    duplicada.code = 11000;
+    bookingsRepository.create.mockRejectedValue(duplicada);
+
+    await expect(bookingsService.createBooking(reservaBase)).rejects.toBeInstanceOf(
+      TurnoOcupadoError,
+    );
+  });
+
+  it("el error lleva la fecha y la hora del turno en conflicto", async () => {
+    bookingsRepository.getActiveBySlot.mockResolvedValue({ _id: "otra" });
+    const error = await bookingsService.createBooking(reservaBase).catch((e) => e);
+    expect(error.turno).toEqual({ date: reservaBase.date, time: reservaBase.time });
+  });
+
+  it("una reserva cancelada no ocupa turno, asi que no se consulta", async () => {
+    bookingsRepository.create.mockResolvedValue({ _id: RESERVA_ID });
+    await bookingsService.createBooking({ ...reservaBase, status: "cancelada" });
+    expect(bookingsRepository.getActiveBySlot).not.toHaveBeenCalled();
+    expect(bookingsRepository.create).toHaveBeenCalled();
+  });
+});
+
+describe("updateServiceQuantity", () => {
+  it("devuelve null si la reserva no existe", async () => {
+    bookingsRepository.getById.mockResolvedValue(null);
+    const result = await bookingsService.updateServiceQuantity(RESERVA_ID, SERVICIO_ID, 3);
+    expect(result).toBeNull();
+    expect(bookingsRepository.update).not.toHaveBeenCalled();
+  });
+
+  it("devuelve null si el servicio no esta en la reserva", async () => {
+    bookingsRepository.getById.mockResolvedValue({
+      ...reservaBase,
+      services: [{ service: objectId(OTRO_SERVICIO_ID), quantity: 1 }],
+    });
+    const result = await bookingsService.updateServiceQuantity(RESERVA_ID, SERVICIO_ID, 3);
+    expect(result).toBeNull();
+    expect(bookingsRepository.update).not.toHaveBeenCalled();
+  });
+
+  it("reemplaza la cantidad, no la suma", async () => {
+    bookingsRepository.getById.mockResolvedValue({
+      ...reservaBase,
+      services: [{ service: objectId(SERVICIO_ID), quantity: 2 }],
+    });
+    bookingsRepository.update.mockImplementation((id, data) => data);
+
+    await bookingsService.updateServiceQuantity(RESERVA_ID, SERVICIO_ID, 5);
+
+    const [, data] = bookingsRepository.update.mock.calls[0];
+    expect(data.services[0].quantity).toBe(5);
+  });
+});
+
+describe("removeServiceFromBooking", () => {
+  it("devuelve null si el servicio no esta en la reserva", async () => {
+    bookingsRepository.getById.mockResolvedValue({ ...reservaBase, services: [] });
+    const result = await bookingsService.removeServiceFromBooking(RESERVA_ID, SERVICIO_ID);
+    expect(result).toBeNull();
+    expect(bookingsRepository.update).not.toHaveBeenCalled();
+  });
+
+  it("quita solo ese servicio y deja los demas", async () => {
+    bookingsRepository.getById.mockResolvedValue({
+      ...reservaBase,
+      services: [
+        { service: objectId(SERVICIO_ID), quantity: 2 },
+        { service: objectId(OTRO_SERVICIO_ID), quantity: 1 },
+      ],
+    });
+    bookingsRepository.update.mockImplementation((id, data) => data);
+
+    await bookingsService.removeServiceFromBooking(RESERVA_ID, SERVICIO_ID);
+
+    const [, data] = bookingsRepository.update.mock.calls[0];
+    expect(data.services).toHaveLength(1);
+    expect(data.services[0].service.toString()).toBe(OTRO_SERVICIO_ID);
+  });
+});
+
+describe("emptyBooking", () => {
+  it("devuelve null si la reserva no existe", async () => {
+    bookingsRepository.getById.mockResolvedValue(null);
+    expect(await bookingsService.emptyBooking(RESERVA_ID)).toBeNull();
+  });
+
+  it("deja la reserva sin servicios", async () => {
+    bookingsRepository.getById.mockResolvedValue({
+      ...reservaBase,
+      services: [{ service: objectId(SERVICIO_ID), quantity: 2 }],
+    });
+    bookingsRepository.update.mockImplementation((id, data) => data);
+
+    await bookingsService.emptyBooking(RESERVA_ID);
+
+    expect(bookingsRepository.update).toHaveBeenCalledWith(RESERVA_ID, { services: [] });
+  });
+});
+
+describe("deleteBooking", () => {
+  it("borra la reserva a traves del repository", async () => {
+    bookingsRepository.delete.mockResolvedValue({ _id: RESERVA_ID });
+    const result = await bookingsService.deleteBooking(RESERVA_ID);
+    expect(bookingsRepository.delete).toHaveBeenCalledWith(RESERVA_ID);
+    expect(result).toEqual({ _id: RESERVA_ID });
+  });
+
+  it("devuelve null si no existe", async () => {
+    bookingsRepository.delete.mockResolvedValue(null);
+    expect(await bookingsService.deleteBooking(RESERVA_ID)).toBeNull();
   });
 });

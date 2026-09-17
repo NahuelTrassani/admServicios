@@ -42,7 +42,7 @@ export const createBookingSchema = z
   .strict();
 
 //los dos identificadores viajan en la url, no en el body
-export const addServiceParamsSchema = z
+export const bookingServiceParamsSchema = z
   .object({
     bid: objectId("identificador de la reserva"),
     sid: objectId("identificador del servicio"),
@@ -51,4 +51,14 @@ export const addServiceParamsSchema = z
 
 export const bookingIdParamSchema = z
   .object({ bid: objectId("identificador de la reserva") })
+  .strict();
+
+//la cantidad nueva de un servicio que ya esta en la reserva
+export const updateQuantitySchema = z
+  .object({
+    quantity: z
+      .number({ error: "La cantidad es obligatoria y debe ser un número" })
+      .int("La cantidad debe ser un número entero")
+      .min(1, "La cantidad debe ser de al menos 1; para quitar el servicio usá DELETE"),
+  })
   .strict();
