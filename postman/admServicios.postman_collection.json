@@ -28,6 +28,14 @@
     {
       "key": "mensajeId",
       "value": ""
+    },
+    {
+      "key": "turnoFecha",
+      "value": ""
+    },
+    {
+      "key": "turnoHora",
+      "value": ""
     }
   ],
   "item": [
@@ -1220,6 +1228,22 @@
           "name": "POST crear reserva -> 201 (services vacio)",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "//cada corrida toma un turno distinto, asi la coleccion se puede ejecutar muchas veces",
+                  "const anio = 2030 + Math.floor(Math.random() * 60);",
+                  "const mes = String(1 + Math.floor(Math.random() * 12)).padStart(2, '0');",
+                  "const dia = String(1 + Math.floor(Math.random() * 28)).padStart(2, '0');",
+                  "const hora = String(Math.floor(Math.random() * 24)).padStart(2, '0');",
+                  "const minuto = String(Math.floor(Math.random() * 60)).padStart(2, '0');",
+                  "pm.collectionVariables.set('turnoFecha', `${anio}-${mes}-${dia}`);",
+                  "pm.collectionVariables.set('turnoHora', `${hora}:${minuto}`);"
+                ]
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "type": "text/javascript",
@@ -1243,7 +1267,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"clientName\": \"Carlos Gomez\",\n  \"clientEmail\": \"carlos@gmail.com\",\n  \"date\": \"2026-09-20\",\n  \"time\": \"10:30\",\n  \"status\": \"pendiente\"\n}"
+              "raw": "{\n  \"clientName\": \"Carlos Gomez\",\n  \"clientEmail\": \"carlos@gmail.com\",\n  \"date\": \"{{turnoFecha}}\",\n  \"time\": \"{{turnoHora}}\",\n  \"status\": \"pendiente\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/bookings",
@@ -1254,6 +1278,49 @@
                 "api",
                 "bookings"
               ]
+            }
+          }
+        },
+        {
+          "name": "POST mismo turno otra vez -> 409 (sobreventa)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test('explica el conflicto', () => pm.expect(body.error).to.eql('El turno seleccionado ya no está disponible'));",
+                  "pm.test('devuelve el turno que choca', () => pm.expect(body.turno).to.eql({",
+                  "  date: pm.collectionVariables.get('turnoFecha'),",
+                  "  time: pm.collectionVariables.get('turnoHora'),",
+                  "}));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientName\": \"Otra persona\",\n  \"clientEmail\": \"otra@gmail.com\",\n  \"date\": \"{{turnoFecha}}\",\n  \"time\": \"{{turnoHora}}\",\n  \"status\": \"pendiente\"\n}"
             }
           }
         },
@@ -1593,6 +1660,455 @@
                 "bookings",
                 "{{reservaId}}"
               ]
+            }
+          }
+        },
+        {
+          "name": "PUT modificar cantidad -> 200 (quantity 5)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const sid = pm.collectionVariables.get('servicioId');",
+                  "const item = pm.response.json().services.find(s => s.service === sid);",
+                  "pm.test('reemplaza la cantidad, no la suma', () => pm.expect(item.quantity).to.eql(5));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}/services/{{servicioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{reservaId}}",
+                "services",
+                "{{servicioId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 5\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT cantidad cero -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('el detalle apunta a quantity', () => pm.expect(pm.response.json().detalles[0].campo).to.eql('quantity'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}/services/{{servicioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{reservaId}}",
+                "services",
+                "{{servicioId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 0\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT servicio que no esta en la reserva -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));",
+                  "pm.test('distingue el motivo', () => pm.expect(pm.response.json().error).to.eql('El servicio no forma parte de la reserva'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}/services/{{idInexistente}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{reservaId}}",
+                "services",
+                "{{idInexistente}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "PUT reserva inexistente -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));",
+                  "pm.test('distingue el motivo', () => pm.expect(pm.response.json().error).to.eql('Reserva no encontrada'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{idInexistente}}/services/{{servicioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{idInexistente}}",
+                "services",
+                "{{servicioId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 2\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE quitar un servicio de la reserva -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const services = pm.response.json().services;",
+                  "pm.test('queda un solo servicio', () => pm.expect(services.length).to.eql(1));",
+                  "pm.test('el que queda es el otro', () => pm.expect(services[0].service).to.eql(pm.collectionVariables.get('servicioId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}/services/{{servicioId2}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{reservaId}}",
+                "services",
+                "{{servicioId2}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE el mismo servicio otra vez -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}/services/{{servicioId2}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{reservaId}}",
+                "services",
+                "{{servicioId2}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE vaciar la reserva -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('queda sin servicios', () => pm.expect(pm.response.json().services).to.eql([]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{reservaId}}",
+                "services"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET la reserva vaciada sigue existiendo -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('conserva cliente y turno', () => pm.expect(pm.response.json().time).to.eql(pm.collectionVariables.get('turnoHora')));",
+                  "pm.test('services vacio', () => pm.expect(pm.response.json().services).to.eql([]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{reservaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE vaciar con id mal formado -> 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/abc/services",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "abc",
+                "services"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE eliminar la reserva -> 200",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('devuelve la reserva eliminada', () => pm.expect(pm.response.json()._id).to.eql(pm.collectionVariables.get('reservaId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{reservaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET verifica que el borrado es fisico -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{reservaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE eliminar otra vez -> 404",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings/{{reservaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings",
+                "{{reservaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST el turno liberado se puede volver a reservar -> 201",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "pm.test('toma el mismo turno', () => pm.expect(pm.response.json().time).to.eql(pm.collectionVariables.get('turnoHora')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/bookings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "bookings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientName\": \"Carlos Gomez\",\n  \"clientEmail\": \"carlos@gmail.com\",\n  \"date\": \"{{turnoFecha}}\",\n  \"time\": \"{{turnoHora}}\",\n  \"status\": \"pendiente\"\n}"
             }
           }
         },

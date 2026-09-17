@@ -1,6 +1,6 @@
 # API REST - Sistema de Turnos y Reservas
 
-Pre-entrega 8 del curso Programación Backend I (CoderHouse).
+Entrega final del curso Programación Backend I (CoderHouse).
 
 API REST construida con Express que expone tres recursos: `services` (los servicios que pueden reservarse), `bookings` (las reservas de los clientes) y `messages` (mensajes del sistema), con persistencia en **MongoDB Atlas** mediante Mongoose.
 
@@ -9,6 +9,8 @@ Además de la API, el proyecto sirve vistas renderizadas en el servidor con Hand
 Está organizado en cinco capas —router, controller, service, repository y DAO— cada una con una responsabilidad única y sin conocer más que la siguiente.
 
 El listado de servicios se consulta con **filtros, ordenamiento y paginación resueltos en MongoDB**, todo lo que entra por la API se valida con **Zod** en un middleware previo al controller, y las reservas se devuelven con **populate** para resolver la referencia a cada servicio.
+
+Las reservas se gestionan de punta a punta —crear, consultar, asociar servicios, modificar cantidades, quitar servicios, vaciar y eliminar— y el sistema **impide que dos reservas tomen el mismo turno**, incluso si los pedidos llegan al mismo tiempo.
 
 ## Nota sobre el DELETE de servicios
 
@@ -191,6 +193,7 @@ Los dos recursos exponen un `DELETE`, pero se resuelven distinto a propósito:
 | Recurso | Qué hace el DELETE | Por qué |
 |---|---|---|
 | `services` | marca `available: false` | Las reservas guardan el `ObjectId` del servicio. Un borrado físico dejaría esas reservas apuntando a un documento que ya no existe |
+| `bookings` | borra el documento | Ningún documento referencia una reserva; además, borrarla libera su turno |
 | `messages` | borra el documento | Ningún documento referencia un mensaje, así que no hay integridad que preservar |
 
 Es la misma operación desde afuera y dos decisiones distintas adentro, cada una atada a las relaciones del dato.
@@ -247,7 +250,7 @@ src/
   sockets/
     index.js                    handlers de Socket.io
   utils/
-    errors.js                   distingue errores de validación de fallas reales
+    errors.js                   errores de validación, clave duplicada y turno ocupado
   app.js                        configuración de Express, Handlebars y routers
   server.js                     levanta el servidor HTTP y Socket.io
 public/
@@ -268,7 +271,12 @@ postman/                        colección de pruebas de la API
 | `DELETE /api/services/:sid` | `deleteService` | `update` |
 | `POST /api/bookings` | `createBooking` | `create` |
 | `GET /api/bookings/:bid` | `getBookingById` / `getBookingWithServices` | `getByIdPopulated` |
+| `POST /api/bookings` (turno) | `createBooking` | `getActiveBySlot` + `create` |
 | `POST /api/bookings/:bid/services/:sid` | `addServiceToBooking` | `getById` + `update` |
+| `PUT /api/bookings/:bid/services/:sid` | `updateServiceQuantity` | `getById` + `update` |
+| `DELETE /api/bookings/:bid/services/:sid` | `removeServiceFromBooking` | `getById` + `update` |
+| `DELETE /api/bookings/:bid/services` | `emptyBooking` | `getById` + `update` |
+| `DELETE /api/bookings/:bid` | `deleteBooking` | `delete` |
 | `GET /api/messages` | `getMessages` | `getAll` |
 | `PUT /api/messages/:mid` | `updateMessage` | `update` |
 | `DELETE /api/messages/:mid` | `deleteMessage` | `delete` |
@@ -278,7 +286,7 @@ postman/                        colección de pruebas de la API
 | `GET /api/messages/:mid` | `getMessageById` | `getById` |
 | `POST /api/messages` | `createMessage` | `create` |
 
-Las dos últimas filas muestran por qué los nombres no coinciden entre capas: `deleteService` y `addServiceToBooking` son operaciones del negocio que abajo se resuelven con un `update`. Por eso el DAO no tiene método `delete`.
+Las dos últimas filas muestran por qué los nombres no coinciden entre capas: `deleteService` y `addServiceToBooking` son operaciones del negocio que abajo se resuelven con un `update`. Por eso el DAO de services no tiene método `delete`. Quitar un servicio de una reserva o vaciarla tampoco borra nada: son cambios sobre el array `services`, y también bajan como `update`.
 
 En `addServiceToBooking`, el controller consulta por separado la reserva y el servicio antes de llamar al service, para poder responder cuál de los dos falta. El service vuelve a validar ambos, de modo que no dependa de que su llamador lo haga.
 
@@ -356,6 +364,7 @@ Los schemas están en `src/validations/`, uno por recurso.
 | `booking.time` | formato `HH:MM` en 24 horas |
 | `booking.status` | solo `pendiente`, `confirmada` o `cancelada`; por defecto `pendiente` |
 | `:bid` y `:sid` | 24 caracteres hexadecimales (formato de un ObjectId) |
+| `quantity` (modificar cantidad) | entero, mínimo 1 |
 | `message.user` | texto, 1 a 40 caracteres |
 | `message.message` | texto, 1 a 500 caracteres |
 
@@ -617,7 +626,58 @@ Content-Type: application/json
 }
 ```
 
-Todos los campos son obligatorios. Si falta alguno, responde `400`.
+Todos los campos son obligatorios salvo `status`, que por defecto es `pendiente`. Si falta alguno, responde `400`.
+
+#### Dos reservas no pueden tomar el mismo turno
+
+Un turno es la combinación de **fecha y hora**. Si ya hay una reserva activa (pendiente o confirmada) en ese turno, responde `409 Conflict` con el turno que choca:
+
+```json
+{
+  "error": "El turno seleccionado ya no está disponible",
+  "turno": { "date": "2026-05-03", "time": "18:50" }
+}
+```
+
+`409` y no `400`: el pedido está bien escrito, pero choca con el estado actual. Es el caso que define la [RFC 9110, sección 15.5.10](https://www.rfc-editor.org/rfc/rfc9110.html#name-409-conflict): un conflicto que el usuario puede resolver eligiendo otro horario y volviendo a enviar.
+
+La protección está en dos lugares, y hacen falta los dos:
+
+**1. El service consulta si el turno está libre** antes de crear la reserva. Así el usuario recibe un mensaje claro.
+
+```js
+// src/services/bookings.service.js
+const ocupado = await bookingsRepository.getActiveBySlot(data.date, data.time);
+if (ocupado) {
+  throw new TurnoOcupadoError(data.date, data.time);
+}
+```
+
+**2. Un índice único en MongoDB garantiza que no pase nunca.** La consulta del paso 1 sola no alcanza: si dos pedidos llegan al mismo tiempo, los dos consultan, los dos ven el turno libre y los dos intentan crear. Entre la consulta y la escritura hay una ventana. El índice cierra esa ventana en la base, donde las escrituras son atómicas: la segunda inserción se rechaza.
+
+```js
+// src/models/booking.model.js
+bookingSchema.index(
+  { date: 1, time: 1 },
+  { unique: true, partialFilterExpression: { status: { $in: ESTADOS_ACTIVOS } } },
+);
+```
+
+Está declarado en el schema, no creado a mano en Atlas: así viaja con el código y Mongoose lo crea al levantar la aplicación contra cualquier base.
+
+Es **parcial**: solo cuentan las reservas activas, así que una reserva cancelada no bloquea su horario.
+
+Cuando el índice rechaza una escritura, Mongo devuelve el código `11000`, y el service lo traduce al mismo error que el paso 1. Para el cliente, las dos situaciones son idénticas:
+
+```js
+} catch (error) {
+  //dos pedidos simultaneos pasan la consulta de arriba: el indice unico frena al segundo
+  if (esClaveDuplicada(error)) {
+    throw new TurnoOcupadoError(data.date, data.time);
+  }
+```
+
+Verificado enviando 10 pedidos simultáneos para el mismo turno: se crea exactamente una reserva y los otros nueve reciben `409`.
 
 ### PUT /api/services/:id
 
@@ -666,9 +726,13 @@ Todas las rutas cuelgan de `/api/bookings`.
 
 | Método | Ruta | Descripción | Respuestas |
 |--------|------|-------------|------------|
-| POST | `/api/bookings` | Crea una reserva | 201 / 400 |
+| POST | `/api/bookings` | Crea una reserva | 201 / 400 / 409 |
 | GET | `/api/bookings/:bid` | Devuelve una reserva por id | 200 / 404 |
-| POST | `/api/bookings/:bid/services/:sid` | Agrega un servicio a una reserva | 200 / 404 |
+| POST | `/api/bookings/:bid/services/:sid` | Agrega un servicio a una reserva | 200 / 400 / 404 |
+| PUT | `/api/bookings/:bid/services/:sid` | Modifica la cantidad de un servicio de la reserva | 200 / 400 / 404 |
+| DELETE | `/api/bookings/:bid/services/:sid` | Quita un servicio de la reserva | 200 / 400 / 404 |
+| DELETE | `/api/bookings/:bid/services` | Vacía la reserva: quedan el cliente y el turno, sin servicios | 200 / 400 / 404 |
+| DELETE | `/api/bookings/:bid` | Elimina la reserva y libera su turno | 200 / 400 / 404 |
 
 ### POST /api/bookings
 
@@ -761,7 +825,54 @@ Devuelve la reserva completa actualizada:
 }
 ```
 
-Este endpoint devuelve la referencia **sin poblar**, a diferencia del `GET`. Es a propósito: lo que responde es el estado que quedó guardado. El populate es una decisión de lectura, y el endpoint de lectura es el `GET`.
+Este endpoint devuelve la referencia **sin poblar**, a diferencia del `GET`. Es a propósito: lo que responde es el estado que quedó guardado. El populate es una decisión de lectura, y el endpoint de lectura es el `GET`. Lo mismo vale para los endpoints que siguen.
+
+### PUT /api/bookings/:bid/services/:sid
+
+Reemplaza la cantidad de un servicio que ya forma parte de la reserva.
+
+```
+PUT http://localhost:8080/api/bookings/68b1f2a4c9e77d3b1a4f0099/services/68b1f2a4c9e77d3b1a4f0012
+Content-Type: application/json
+
+{ "quantity": 3 }
+```
+
+- `quantity` tiene que ser un entero mayor a cero. Para sacar el servicio está el `DELETE`, así que `0` responde `400`.
+- La cantidad se **reemplaza**, no se suma: mandar `3` deja `3`.
+- Si la reserva no existe responde `404` con `Reserva no encontrada`; si existe pero ese servicio no está en ella, `404` con `El servicio no forma parte de la reserva`. Son dos mensajes distintos para que el cliente sepa cuál de los dos ids revisar.
+
+### DELETE /api/bookings/:bid/services/:sid
+
+Quita un servicio de la reserva y deja los demás.
+
+```
+DELETE http://localhost:8080/api/bookings/68b1f2a4c9e77d3b1a4f0099/services/68b1f2a4c9e77d3b1a4f0012
+```
+
+Responde `200` con la reserva actualizada, o `404` con los mismos dos mensajes que el `PUT`.
+
+### DELETE /api/bookings/:bid/services
+
+Vacía la reserva: quedan el cliente, la fecha y la hora, pero sin servicios. El turno sigue tomado.
+
+```
+DELETE http://localhost:8080/api/bookings/68b1f2a4c9e77d3b1a4f0099/services
+```
+
+Responde `200` con `"services": []`, o `404` si la reserva no existe.
+
+### DELETE /api/bookings/:bid
+
+Elimina la reserva de la base y **libera el turno**, que puede volver a reservarse.
+
+```
+DELETE http://localhost:8080/api/bookings/68b1f2a4c9e77d3b1a4f0099
+```
+
+Responde `200` con la reserva eliminada, o `404` si no existe. Es un borrado físico: ningún documento guarda una referencia a una reserva, así que no hay integridad que preservar (ver la tabla de bajas en la sección de arquitectura).
+
+**Vaciar y eliminar son dos operaciones distintas a propósito.** Vaciar conserva el turno para que el cliente vuelva a elegir servicios sin perder el horario; eliminar lo devuelve a la agenda.
 
 ## Recurso: messages
 
@@ -873,7 +984,8 @@ Cada evento responde a una acción concreta del sistema, no a la conexión de un
 | `PUT /api/services/:sid` | `servicioActualizado` | reemplaza la fila |
 | `DELETE /api/services/:sid` | `servicioActualizado` | la fila pasa a "no disponible" |
 | `POST /api/bookings` | `reservaCreada` | actualiza la vista de disponibilidad |
-| `POST /api/bookings/:bid/services/:sid` | `reservaActualizada` | actualiza la vista de disponibilidad |
+| `POST`, `PUT` y `DELETE` sobre `/api/bookings/:bid/services` | `reservaActualizada` | reemplaza el bloque de la reserva |
+| `DELETE /api/bookings/:bid` | `reservaEliminada` | quita el bloque y actualiza el contador |
 | Cualquiera de las anteriores | `actividadRegistrada` | suma la novedad al panel de actividad |
 
 En el controller, después de que la operación salió bien:
@@ -954,7 +1066,9 @@ También se puede correr desde la terminal, sin abrir Postman:
 npx newman run postman/admServicios.postman_collection.json --env-var baseUrl=http://localhost:8080
 ```
 
-Son 65 requests con 119 validaciones.
+Son 79 requests con 146 validaciones.
+
+La reserva inicial toma una **fecha y hora al azar** en cada corrida. Con fecha y hora fijas, la segunda ejecución de la colección chocaría con el turno que dejó la primera y respondería `409`. Así se puede correr las veces que haga falta.
 
 Como los identificadores son `ObjectId` generados por MongoDB, la colección no usa valores fijos: los primeros requests crean los documentos y guardan sus `_id` en variables que reutilizan los siguientes. Por eso conviene ejecutarla completa y en orden.
 
@@ -1007,6 +1121,16 @@ Casos cubiertos:
 | bookings | Agregar a una reserva inexistente | 404 |
 | bookings | Releer la reserva | 200, la relación quedó persistida en MongoDB |
 | bookings | Verificar el populate | el `service` viene como documento completo, no como id |
+| bookings | Crear otra reserva en el mismo turno | 409, con el turno en conflicto |
+| bookings | Modificar la cantidad de un servicio | 200, reemplaza la cantidad |
+| bookings | Modificar con cantidad cero | 400 |
+| bookings | Modificar un servicio que no está en la reserva, o en una reserva inexistente | 404, con el motivo |
+| bookings | Quitar un servicio | 200, quedan los demás |
+| bookings | Quitar el mismo servicio otra vez | 404 |
+| bookings | Vaciar la reserva y releerla | 200, sigue existiendo con `services` vacío |
+| bookings | Vaciar con un id mal formado | 400 |
+| bookings | Eliminar la reserva, releerla y eliminarla otra vez | 200 / 404 / 404 |
+| bookings | Volver a reservar el turno liberado | 201 |
 
 ## Tests automatizados
 
@@ -1022,13 +1146,14 @@ Los archivos están en `tests/`:
 | Archivo | Qué prueba |
 |---|---|
 | `services.service.test.js` | metadatos de paginación, validaciones de creación, baja lógica |
-| `bookings.service.test.js` | creación, y la regla de incrementar `quantity` sin duplicar |
+| `bookings.service.test.js` | creación, turno ocupado, incrementar y modificar `quantity`, quitar, vaciar y eliminar |
+| `bookings.controller.test.js` | códigos HTTP de reservas, el `409` y los eventos emitidos |
 | `messages.service.test.js` | creación, consulta, edición y borrado de mensajes |
-| `models.test.js` | las validaciones de los tres schemas de Mongoose |
+| `models.test.js` | las validaciones de los tres schemas de Mongoose y el índice único del turno |
 | `validations.test.js` | los schemas de Zod: qué aceptan y qué rechazan |
 | `validate.middleware.test.js` | que el middleware corte con `400` y no llame al controller |
 | `services.controller.test.js` | códigos HTTP y emisión de eventos |
-| `views.controller.test.js` | render de las vistas y conversión de documentos |
+| `views.controller.test.js` | render de las vistas, conversión de documentos y formato de la fecha del turno |
 | `sockets.test.js` | recepción de notas, validación y difusión |
 
 **Cómo se prueban los services sin tocar la base.** El repository se reemplaza por un doble que devuelve lo que cada test necesita, así el service se prueba aislado:
