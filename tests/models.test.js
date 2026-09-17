@@ -112,3 +112,21 @@ describe("Message model", () => {
   it("rechaza un mensaje mas largo que el maximo", () =>
     falla(new Message({ ...valido, message: "a".repeat(501) }), "message"));
 });
+
+describe("indice del turno", () => {
+  //el indice se declara en el schema para que viaje con el codigo y mongoose lo cree al levantar
+  const indiceDelTurno = () =>
+    Booking.schema.indexes().find(([campos]) => campos.date === 1 && campos.time === 1);
+
+  it("fecha y hora forman un indice unico", () => {
+    const [, opciones] = indiceDelTurno();
+    expect(opciones.unique).toBe(true);
+  });
+
+  it("solo cuentan las reservas activas: una cancelada libera el horario", () => {
+    const [, opciones] = indiceDelTurno();
+    expect(opciones.partialFilterExpression).toEqual({
+      status: { $in: ["pendiente", "confirmada"] },
+    });
+  });
+});

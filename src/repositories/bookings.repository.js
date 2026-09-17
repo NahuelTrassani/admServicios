@@ -17,12 +17,20 @@ class BookingsRepository {
     return this.dao.getById(id);
   }
 
+  async getActiveBySlot(date, time) {
+    return this.dao.getActiveBySlot(date, time);
+  }
+
   async create(data) {
     return this.dao.create(data);
   }
 
   async update(id, data) {
     return this.dao.update(id, data);
+  }
+
+  async delete(id) {
+    return this.dao.delete(id);
   }
 }
 

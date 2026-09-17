@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import Booking from "../models/booking.model.js";
+import Booking, { ESTADOS_ACTIVOS } from "../models/booking.model.js";
 
 class BookingsDao {
   //populate resuelve la referencia y trae el servicio completo en vez del ObjectId.
@@ -22,6 +22,10 @@ class BookingsDao {
     return Booking.findById(id).populate("services.service");
   }
 
+  async getActiveBySlot(date, time) {
+    return Booking.findOne({ date, time, status: { $in: ESTADOS_ACTIVOS } });
+  }
+
   async create(data) {
     return Booking.create(data);
   }
@@ -30,7 +34,17 @@ class BookingsDao {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return null;
     }
-    return Booking.findByIdAndUpdate(id, data, { returnDocument: "after" });
+    return Booking.findByIdAndUpdate(id, data, {
+      returnDocument: "after",
+      runValidators: true,
+    });
+  }
+
+  async delete(id) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return null;
+    }
+    return Booking.findByIdAndDelete(id);
   }
 }
 

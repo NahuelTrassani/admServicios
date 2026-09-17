@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 
+//solo estas reservas ocupan un turno: una cancelada libera el horario
+export const ESTADOS_ACTIVOS = ["pendiente", "confirmada"];
+
 const bookingSchema = new mongoose.Schema({
   clientName: { type: String, required: true, trim: true },
   clientEmail: {
@@ -34,5 +37,15 @@ const bookingSchema = new mongoose.Schema({
     },
   ],
 });
+
+//un turno es fecha + hora: dos reservas activas no pueden compartirlo.
+//el indice lo hace cumplir la base, aunque lleguen dos pedidos al mismo tiempo
+bookingSchema.index(
+  { date: 1, time: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $in: ESTADOS_ACTIVOS } },
+  },
+);
 
 export default mongoose.model("Booking", bookingSchema);
