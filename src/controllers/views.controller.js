@@ -8,8 +8,10 @@ import { listServicesQuerySchema } from "../validations/service.validation.js";
 const formatearMomento = (fecha) =>
   fecha ? new Date(fecha).toLocaleString("es-AR") : "";
 
+//la fecha del turno es un dia de calendario guardado a medianoche UTC: se muestra en UTC
+//para que en Argentina (UTC-3) no aparezca como el dia anterior
 const formatearFecha = (fecha) =>
-  fecha ? new Date(fecha).toLocaleDateString("es-AR") : "sin fecha";
+  fecha ? new Date(fecha).toLocaleDateString("es-AR", { timeZone: "UTC" }) : "sin fecha";
 
 export const renderServices = async (req, res) => {
   try {

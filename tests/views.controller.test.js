@@ -162,6 +162,22 @@ describe("renderAvailability", () => {
   });
 });
 
+describe("fecha del turno", () => {
+  it("muestra el dia guardado, sin correrlo por la zona horaria", async () => {
+    //mongo guarda 2026-09-15 a medianoche UTC; en UTC-3 eso seria el 14 si no se formatea en UTC
+    bookingsService.getBookingsWithServices.mockResolvedValue([
+      documento({ _id: "b1", date: new Date("2026-09-15") }),
+    ]);
+    servicesService.countServices.mockResolvedValue(0);
+    const res = armarRes();
+
+    await controller.renderAvailability(armarReq(), res);
+
+    const [, datos] = res.render.mock.calls[0];
+    expect(datos.bookings[0].fecha).toBe("15/9/2026");
+  });
+});
+
 describe("renderActivity", () => {
   it("renderiza las novedades con el momento formateado", async () => {
     messagesService.getLatestMessages.mockResolvedValue([

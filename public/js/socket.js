@@ -102,7 +102,7 @@ const bloqueDeReserva = (reserva) => {
       <span class="estado ${reserva.status}">${reserva.status}</span>
     </header>
     <p class="dato">${reserva.clientEmail}</p>
-    <p class="dato">${new Date(reserva.date).toLocaleDateString("es-AR")} a las ${reserva.time}</p>
+    <p class="dato">${new Date(reserva.date).toLocaleDateString("es-AR", { timeZone: "UTC" })} a las ${reserva.time}</p>
     ${servicios}
   `;
   return article;
@@ -133,6 +133,23 @@ socket.on("reservaActualizada", (reserva) => {
   const bloque = bloqueDeReserva(reserva);
   bloque.classList.add("actualizado");
   anterior.replaceWith(bloque);
+});
+
+//se borro la reserva: sale su bloque, y si no queda ninguna vuelve el mensaje de lista vacia
+socket.on("reservaEliminada", ({ _id }) => {
+  if (!listaReservas) return;
+
+  listaReservas.querySelector(`article[data-id="${_id}"]`)?.remove();
+  const restantes = listaReservas.querySelectorAll("article[data-id]").length;
+
+  if (totalReservas) totalReservas.textContent = restantes;
+
+  if (restantes === 0) {
+    const vacio = document.createElement("p");
+    vacio.className = "vacio";
+    vacio.textContent = "Todavía no hay reservas cargadas.";
+    listaReservas.appendChild(vacio);
+  }
 });
 
 // ---- panel de actividad ----
